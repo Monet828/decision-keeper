@@ -1,0 +1,89 @@
+# High-1 の開発経験から人が起こした判断資産。承認済み。
+# 自動抽出された DEC-C-reelauto は question/decision が空だったため、
+# design.md の「設計判断の記録」と High-1 の note から人が構造化した。
+id: DEC-001
+type: decision
+version: 1
+status: approved
+approved_by: takeuchi
+decided_at: 2026-09-21
+
+question: 連携アプリ Insta AI Pro の機能を reel-auto へ持ち込むとき、どこまで移植するか
+
+decision: 読み取り側のみ移植する。書き込み・同期・カーソル管理は移植しない
+
+rationale:
+  status: known
+  text: >-
+    reel-auto は編集者本人が使う単一プロセスのローカルツールで、
+    `npm run server` を起動している間しか動かない。Insta AI Pro はサーバーレス環境で
+    継続的に動く前提であり、同期基盤（フルクロール→upsert、Changes API のカーソル管理、
+    差分反映）を複製するのは reel-auto の実行形態に合わない過剰投資になる。
+    design.md 51.3「低レベル層のみ移植する」の方針そのもの。
+
+conditions:
+  - id: C1
+    statement: reel-auto 側に読み取り用の正規化層が既にある（移植先の受け皿が存在する）
+    expectation: present
+    verifier:
+      type: grep
+      targets: ['src/server/*']
+      patterns: ['toLedgerImage']
+    source: High-1 で実測。driveLedgerRead.ts:77 に toLedgerImage が存在
+    status: active
+
+  - id: C2
+    statement: reel-auto の server / drive 層に常時同期の基盤が無い
+    expectation: absent
+    verifier:
+      type: grep
+      targets: ['src/server/*', 'src/drive/*']
+      # 語境界を付けないと ACRONYM 等に部分一致する（High-1 で実測）
+      patterns: ['\bcron\b', 'node-cron', '\bscheduler\b', 'changes\.list', 'startPageToken']
+    source: High-1 で実測。対照的に Insta 側には driveChanges.ts / driveLedgerSync.ts がある
+    status: active
+
+  - id: C3
+    statement: 移植元となる Insta AI Pro の読み取りモジュールが実在する
+    expectation: present
+    verifier:
+      type: file_exists
+      targets:
+        - '/Users/takeuchiyusuke/Developer/Insta/repo/src/lib/driveLedger.ts'
+        - '/Users/takeuchiyusuke/Developer/Insta/repo/src/lib/composeQuery.ts'
+    source: High-1 で実測
+    status: active
+
+alternatives:
+  - option: Insta の同期機構ごと移植する
+    rejected_because: reel-auto は常時稼働しないため同期基盤が機能しない。51.3 に反する
+  - option: 何も移植せず独自実装する
+    rejected_because: 同じ Supabase / Drive を共有しており、データ形式を二重管理することになる
+
+provenance:
+  - type: orca_run
+    ref: run_reelauto_high1
+    note: High-1 の開発記録（adapter=decision-keeper-shell）
+  - type: commit
+    ref: 28a3dd20466b3a0225708bc37e7fbc7b116a87dc
+    note: reel-auto/repo の High-1 着手時点
+  - type: document
+    ref: 'reel-auto/repo/docs/design.md §51.3 / §39.3.1 / §39.3.2 設計判断の記録'
+  - type: human_input
+    ref: '2026-09-21 High-1 実施時の判断（自動抽出では question/decision が空だったため人が構造化）'
+
+related_assets:
+  - id: IMP-001
+    relationship: implemented_by
+
+applies_to:
+  paths: ['src/server/*', 'src/drive/*', 'src/lib/*']
+  keywords:
+    - 移植
+    - Insta
+    - Insta AI Pro
+    - 連携アプリ
+    - 台帳
+    - drive_images
+    - account_source_scope
+    - 読み取り専用

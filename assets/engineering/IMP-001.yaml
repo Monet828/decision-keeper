@@ -1,0 +1,63 @@
+# High-1 で実装し、検証を通過した実装資産。承認済み。
+# 自動抽出された IMP-C-reelauto を土台に、entrypoint / commit / runtime を人が補完した。
+id: IMP-001
+type: implementation
+version: 1
+status: approved
+approved_by: takeuchi
+decided_at: 2026-09-21
+
+purpose: >-
+  Insta AI Pro が Drive の appProperties に書いたタグを、reel-auto 側の読み取り型
+  （LedgerImage）へ正規化して詰め替える。書き込み側（toLedgerRow 相当）は移植しない。
+
+implementation:
+  repository: /Users/takeuchiyusuke/Developer/reel-auto/repo
+  commit: 28a3dd20466b3a0225708bc37e7fbc7b116a87dc
+  branch: feat/high1-crawl-appproperties
+  paths:
+    - src/server/driveLedgerRead.ts
+    - src/server/index.ts
+  entrypoint: src/server/driveLedgerRead.ts:toLedgerImageFromCrawled
+
+compatibility:
+  runtime: Node >=22 / TypeScript
+  dependencies: []
+  requires:
+    - 読み取り専用であること（Drive / Supabase へ書き込まない）
+    - 既存の toLedgerImage と同じファイル・同じ層に置くこと
+    - "キー形式が混在する（snake_case は scene/q_*、camelCase は styleTags/styleScores/taxonomyVersion）"
+
+verification:
+  tests:
+    - command: npx tsx --test tests/driveLedgerRead.test.ts
+      paths: ['tests/driveLedgerRead.test.ts']
+      last_result: passed
+      evidence: High-1 のソース変更後、seq 18 で終了コード 0
+  known_failing:
+    - command: npm test
+      exit_code: 1
+      note: High-1 の変更前から4件失敗している（seCorrupt.test.ts 等）。今回の変更と無関係
+
+provenance:
+  - type: orca_run
+    ref: run_reelauto_high1
+  - type: commit
+    ref: 28a3dd20466b3a0225708bc37e7fbc7b116a87dc
+  - type: test_result
+    ref: npx tsx --test tests/driveLedgerRead.test.ts
+    note: ソース変更後の seq 18 で終了コード 0
+
+related_assets:
+  - id: DEC-001
+    relationship: implements
+
+applies_to:
+  paths: ['src/server/*']
+  keywords:
+    - 正規化
+    - 移植
+    - Insta
+    - LedgerImage
+    - appProperties
+    - 台帳

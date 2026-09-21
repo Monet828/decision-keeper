@@ -25,14 +25,43 @@ def _new_id() -> str:
     return f"EV-{next(_counter):04d}"
 
 
+def _split_targets(patterns: list[str]) -> tuple[list[str], list[str]]:
+    """対象を「このリポジトリ内」と「外部（絶対パス）」に分ける。
+
+    Condition が別リポジトリの状態を問うことがある（移植元が実在するか等）。
+    絶対パスまたは ~ 始まりの target は、root ではなくそのパス自身を見る。
+    """
+    inside = [p for p in patterns if not (p.startswith("/") or p.startswith("~"))]
+    outside = [p for p in patterns if p.startswith("/") or p.startswith("~")]
+    return inside, outside
+
+
+def _iter_external(patterns: list[str]):
+    """絶対パスの glob を直接展開する。"""
+    import glob as _glob
+
+    for pat in patterns:
+        expanded = str(Path(pat).expanduser())
+        for hit in sorted(_glob.glob(expanded, recursive=True)):
+            path = Path(hit)
+            if path.is_file() and not any(p in SKIP_DIRS for p in path.parts):
+                yield path, hit
+
+
 def _iter_files(root: Path, patterns: list[str]):
+    inside, outside = _split_targets(patterns)
+    yield from _iter_external(outside)
+
     if not root.is_dir():
+        return
+    # 外部だけを指定した場合は、このリポジトリ内は走査しない
+    if outside and not inside:
         return
     for path in sorted(root.rglob("*")):
         if not path.is_file() or any(p in SKIP_DIRS for p in path.parts):
             continue
         rel = path.relative_to(root).as_posix()
-        if not patterns or any(fnmatch.fnmatch(rel, pat) for pat in patterns):
+        if not inside or any(fnmatch.fnmatch(rel, pat) for pat in inside):
             yield path, rel
 
 
