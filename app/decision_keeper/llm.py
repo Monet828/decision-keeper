@@ -14,6 +14,9 @@ from typing import Protocol
 
 DEFAULT_BASE_URL = "https://api.orcarouter.ai/v1"
 DEFAULT_MODEL = "orcarouter/auto"
+# 推論型モデルに振られると本文生成の前に推論トークンを消費し、応答が遅い。
+# 実測では本番プロンプトで60秒を超えたため、既定を長くとる。
+DEFAULT_TIMEOUT_SEC = 180.0
 
 
 @dataclass
@@ -75,9 +78,14 @@ class OrcaRouterClient:
     """OrcaRouter 経由の実呼び出し（OpenAI互換 /chat/completions）。"""
 
     def __init__(
-        self, api_key: str, base_url: str | None = None, model: str | None = None
+        self,
+        api_key: str,
+        base_url: str | None = None,
+        model: str | None = None,
+        timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     ):
         self.api_key = api_key
+        self.timeout_sec = timeout_sec
         self.base_url = (
             base_url or os.environ.get("ORCAROUTER_BASE_URL") or DEFAULT_BASE_URL
         ).rstrip("/")
@@ -100,7 +108,7 @@ class OrcaRouterClient:
                     {"role": "user", "content": user},
                 ],
             },
-            timeout=60.0,
+            timeout=self.timeout_sec,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -115,9 +123,11 @@ class OrcaRouterClient:
         )
 
 
-def build_client(force_stub: bool = False) -> LLMClient:
+def build_client(
+    force_stub: bool = False, timeout_sec: float = DEFAULT_TIMEOUT_SEC
+) -> LLMClient:
     """環境変数からクライアントを選ぶ。キーが無ければ固定応答に落とす。"""
     key = os.environ.get("ORCAROUTER_API_KEY", "").strip()
     if force_stub or not key:
         return StubClient()
-    return OrcaRouterClient(api_key=key)
+    return OrcaRouterClient(api_key=key, timeout_sec=timeout_sec)

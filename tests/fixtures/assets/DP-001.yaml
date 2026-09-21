@@ -29,7 +29,10 @@ assumptions:
   - id: A-2
     statement: 権限の失効は監査対象であり、監査要件が文書化されている
     verify:
-      method: file_exists
+      # ファイルの存在だけでは「監査要件が文書化されている」の裏付けにならない。
+      # 実LLMがこの弱さを指摘したため、内容を検査する grep に変更した。
+      method: grep
+      pattern: '失効|監査対象|audit'
       paths:
         - 'docs/audit/*'
       expect: present

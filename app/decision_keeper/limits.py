@@ -10,7 +10,10 @@ import time
 from dataclasses import dataclass, field
 
 DEFAULT_MAX_LLM_CALLS = 1
-DEFAULT_MAX_TOKENS = 4000
+# 推論型モデル（実測: orcarouter/auto -> glm-5.3-flash）は本文生成の前に
+# reasoning_tokens を消費する。4000 では本番プロンプトで出力が途中で切れ、
+# JSONが壊れてスキーマ検証に落ちた。実測にもとづき引き上げる。
+DEFAULT_MAX_TOKENS = 12000
 DEFAULT_TIMEOUT_SEC = 300
 
 

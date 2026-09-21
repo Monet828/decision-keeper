@@ -104,7 +104,7 @@ def run_review(args: argparse.Namespace) -> int:
 
     evidence = collect_all(args.repo, asset.assumptions)
     guard_findings = scan_diff(diff_text)
-    client = build_client(force_stub=args.stub)
+    client = build_client(force_stub=args.stub, timeout_sec=float(args.timeout_sec))
     judgements, cost = judge(client, asset, evidence, diff_text, proposal_text, limits)
     verdict, verdict_reason = decide(judgements, guard_findings)
 
