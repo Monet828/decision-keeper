@@ -59,6 +59,20 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     r.add_argument("--model-low", default=DEFAULT_MODEL_LOW, help="難度lowで使うモデル")
     r.add_argument("--model-high", default=DEFAULT_MODEL_HIGH, help="難度highで使うモデル")
+    ev = sub.add_parser("evaluate", help="Task に対し Engineering Asset を検索・評価する")
+    ev.add_argument("--assets", type=Path, required=True, help="Asset ディレクトリ")
+    ev.add_argument(
+        "--task", type=Path, required=True,
+        help="task.md と diff.patch のあるディレクトリ",
+    )
+    ev.add_argument("--repo", type=Path, required=True, help="Verifier を実行する対象リポジトリ")
+    ev.add_argument("--out", type=Path, required=True)
+    ev.add_argument("--task-id", default="", help="省略時は --task のディレクトリ名")
+    ev.add_argument(
+        "--include-candidates", action="store_true",
+        help="未承認候補も検索対象にする（既定では除外）",
+    )
+
     c = sub.add_parser("compare", help="判断資産あり/なしを比較する")
     c.add_argument("--assets", type=Path, required=True)
     c.add_argument("--cases", type=Path, required=True, help="事例ディレクトリの親")
@@ -226,10 +240,51 @@ def run_compare(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_evaluate(args: argparse.Namespace) -> int:
+    from .assets_v2.agent import Task
+    from .assets_v2.agent import run as run_agent
+    from .assets_v2.report import write as write_report
+    from .assets_v2.store import AssetStore, StoreError
+
+    task_md = args.task / "task.md"
+    diff = args.task / "diff.patch"
+    if not task_md.exists():
+        print(f"task.md が見つかりません: {task_md}", file=sys.stderr)
+        return 2
+
+    try:
+        store = AssetStore.load(args.assets, include_candidates=args.include_candidates)
+    except StoreError as exc:
+        print(f"Asset を読めません: {exc}", file=sys.stderr)
+        return 2
+
+    task = Task(
+        id=args.task_id or args.task.name,
+        description=task_md.read_text(encoding="utf-8"),
+        diff=diff.read_text(encoding="utf-8") if diff.exists() else "",
+    )
+    result = run_agent(store, task, args.repo)
+    json_path = write_report(result, args.out)
+
+    e = result.evaluation
+    print(f"判定: {e.verdict if e else '(該当Assetなし)'}")
+    print(f"人の確認が必要: {result.engineering_context.human_review_required}")
+    print(f"再利用可: {result.reusable_implementations or 'なし'}")
+    print(f"レポート: {args.out}")
+    print(f"JSON:     {json_path}")
+    for n in result.notes:
+        print(f"  - {n}")
+    if not result.assets_unchanged:
+        return 3
+    return result.exit_code
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.command == "review":
         return run_review(args)
+    if args.command == "evaluate":
+        return run_evaluate(args)
     if args.command == "compare":
         return run_compare(args)
     return 2

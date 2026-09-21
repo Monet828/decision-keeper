@@ -1,0 +1,17 @@
+# 未承認の candidate。通常検索で返してはならない（EA-02）。
+id: DEC-C900
+type: decision
+version: 1
+status: candidate
+approved_by: ''
+
+question: '[要記述]'
+decision: '[要記述]'
+rationale:
+  status: unknown
+
+conditions: []
+provenance: []
+applies_to:
+  paths: ['src/auth/*']
+  keywords: ['権限', 'permission', 'キャッシュ', 'cache']

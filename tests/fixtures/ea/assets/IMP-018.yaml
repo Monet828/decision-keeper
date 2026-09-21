@@ -1,0 +1,44 @@
+# Approved な Implementation Asset。
+# 「このコードが存在する」ではなく「この目的を満たす実装が、この条件下で、
+# この検証を通過した」という主張を表す。
+id: IMP-018
+type: implementation
+version: 1
+status: approved
+approved_by: takeuchi
+decided_at: 2025-11-04
+
+purpose: 権限チェックを、キャッシュを使わずにDBから都度取得して行う
+
+implementation:
+  repository: example/billing-api
+  commit: abc123def456
+  paths:
+    - src/auth/permissions.py
+  entrypoint: src.auth.permissions:can
+
+compatibility:
+  runtime: python>=3.10
+  dependencies: []
+  requires:
+    - 権限テーブルに user_id インデックスが存在すること
+
+verification:
+  tests:
+    - path: tests/test_permissions.py
+      command: python3 -m pytest tests/test_permissions.py -q
+      last_result: passed
+
+provenance:
+  - type: commit
+    ref: abc123def456
+  - type: test_result
+    ref: 'CI run #4412 (passed)'
+
+related_assets:
+  - id: DEC-007
+    relationship: implements
+
+applies_to:
+  paths: ['src/auth/*']
+  keywords: ['権限', 'permission', '認可']

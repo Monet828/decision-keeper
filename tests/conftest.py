@@ -6,3 +6,5 @@ sys.path.insert(0, str(ROOT / "app"))
 
 FIXTURES = ROOT / "tests" / "fixtures"
 ASSETS = FIXTURES / "assets"
+
+__all__ = ["ROOT", "FIXTURES", "ASSETS"]
