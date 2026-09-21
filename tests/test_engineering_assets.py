@@ -151,6 +151,35 @@ def test_not_scanned_is_not_observed():
     assert evaluate_condition(cond, ev).judgment == "not_observed"
 
 
+def test_file_exists_absent_can_be_supported():
+    """EA-06: file_exists でも「探索して無かった」は supported に到達できること。
+
+    回帰の由来: files_scanned に一致件数を入れていたため、ファイルが無いと
+    scanned=0 になり not_observed へ落ちた。expectation: absent が原理的に
+    成立しなくなっていた（DEC-004 C1 で実測）。
+    """
+    cond = Condition(
+        id="C1", statement="設定ファイルが無い", expectation="absent",
+        verifier=Verifier(type="file_exists", targets=["vercel.json"]),
+    )
+    ev = verifiers.run(TASKS / "T1-inherit" / "repo", cond)
+    assert ev.type == "file_list"
+    assert ev.observation["matches"] == 0
+    assert ev.observation["files_scanned"] > 0
+    assert evaluate_condition(cond, ev).judgment == "supported"
+
+
+def test_file_exists_missing_repo_is_not_observed():
+    """探索が成立しない場合は supported にしない。"""
+    cond = Condition(
+        id="C1", statement="設定ファイルが無い", expectation="absent",
+        verifier=Verifier(type="file_exists", targets=["vercel.json"]),
+    )
+    ev = verifiers.run(TASKS / "no-such-repo-xyz", cond)
+    assert ev.type == "not_observed"
+    assert evaluate_condition(cond, ev).judgment == "not_observed"
+
+
 # --- EA-07: 補完してはならない ---
 
 def test_rationale_unknown_is_allowed_and_known_requires_text():

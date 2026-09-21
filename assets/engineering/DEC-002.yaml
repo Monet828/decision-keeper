@@ -1,0 +1,61 @@
+# High-2 比較実験で、両群が独立に発見した落とし穴を資産化した。
+# 片方だけが見つけたものは含めていない（再現性が確認できたものだけ）。
+id: DEC-002
+type: decision
+version: 1
+status: approved
+approved_by: takeuchi
+decided_at: 2026-09-21
+
+question: 台帳読み取り経路に絞り込みを入れるとき、クロール経路はどう扱うか
+
+decision: 台帳経路に絞り込みを入れるなら、クロール経路にも同じ絞り込みを掛ける
+
+rationale:
+  status: known
+  text: >-
+    画像一覧の取得は「台帳を読む、0件ならクロールへフォールバックする」構造になっている。
+    台帳側だけに絞り込みを入れると、絞り込んだ結果が0件になった瞬間に
+    フォールバックが発火し、アカウント全体をクロールして返してしまう。
+    つまり絞り込みが「除外したかったフォルダごと全部返す」という逆の結果になる。
+    High-2 の比較実験で、資産なし群・資産あり群の両方が独立にこの罠を発見した。
+
+conditions:
+  - id: C1
+    statement: 画像一覧の取得が、台帳0件でクロールへフォールバックする構造になっている
+    expectation: present
+    verifier:
+      type: grep
+      targets: ['src/server/index.ts']
+      patterns: ['fromLedger\.length > 0']
+    source: High-2 で実測。src/server/index.ts:4256
+    status: active
+
+provenance:
+  - type: orca_run
+    ref: arm-no-asset
+    note: High-2 比較実験・資産なし群が独立に発見
+  - type: orca_run
+    ref: arm-with-asset
+    note: High-2 比較実験・資産あり群が独立に発見
+  - type: commit
+    ref: a17ce40
+    note: 実験の共通出発点
+
+related_assets:
+  - id: DEC-003
+    relationship: relates_to
+
+governed_by:
+  - 'docs/requirements.md §51（Drive 素材取り込みの要求。§51.4 に「対象外」の一覧がある）'
+  - 'docs/design.md ##39.3.1（台帳優先・クロールフォールバックの設計）'
+
+applies_to:
+  paths: ['src/server/*', 'src/drive/*']
+  keywords:
+    - 台帳
+    - フォールバック
+    - 絞り込み
+    - クロール
+    - スコープ
+    - 画像一覧

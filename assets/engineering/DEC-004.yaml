@@ -1,0 +1,106 @@
+# 連携アプリ側に「実測付き」で記録されていた判断を、reel-auto のフェーズ105（アクセス制限）に
+# 先回りして渡すために資産化した。
+# 資産化の動機: reel-auto は Vercel 以外（Railway）に載る予定で、この判断の前提が
+# 「成立する側」に入る。判断そのものは連携アプリのもので、reel-auto では未適用。
+id: DEC-004
+type: decision
+version: 1
+status: approved
+approved_by: takeuchi
+decided_at: 2026-09-22
+
+question: 認証ガードの開閉を左右する設定を、環境変数に置くかコードに固定するか
+
+decision: コードに固定する。環境変数には置かない
+
+rationale:
+  status: known
+  text: >-
+    観測（連携アプリ側に記録された実測。ホスト信頼の環境変数を設定せず next start で起動）:
+    `GET /` が 200 を返しアプリ画面が表示された。`GET /api/posts` は 500 を返した。
+    機構としては、認証ライブラリが Vercel 以外で Host ヘッダを信頼せず例外を投げ、
+    その例外が認証ミドルウェアを中断させ、フレームワークはページをそのまま返す。
+    未ログイン時のサインイン画面への転送が起きない。
+    Vercel 上では実行環境が付与する環境変数によって自動的に信頼されるため発現しない。
+    解釈: 認証ガードが fail-open する。開くか閉じるかを決める設定をコードの外に置くと、
+    設定を忘れた環境で黙って開く。移設・プロキシ越し・プレビュー環境が該当する。
+
+conditions:
+  - id: C1
+    statement: デプロイ先が Vercel ではない（ホスト信頼が実行環境から自動で付与されない）
+    expectation: absent
+    verifier:
+      type: file_exists
+      targets: ['vercel.json']
+    source: >-
+      2026-09-22 実測。reel-auto に vercel.json は無く、design ##42 で Railway を選定済み。
+      対照的に連携アプリには vercel.json があり cron 定義のみを持つ
+    status: active
+
+  - id: C2
+    statement: 認証ガードがミドルウェア層にあり、その層の例外がフレームワーク既定で「通す」側に倒れる
+    expectation: present
+    verifier:
+      type: human
+      note: >-
+        認証方式を決めた時点（フェーズ105 W3）に人が確認する。
+        Express は Next.js とミドルウェアの例外処理が異なるため、
+        この前提が reel-auto でそのまま成り立つとは限らない
+    source: 連携アプリ（Next.js + 認証ライブラリ）で実測。reel-auto は Express のため未確認
+    status: active
+
+  - id: C3
+    statement: 環境変数だけで認証を素通りさせる分岐が入っていない
+    expectation: absent
+    verifier:
+      type: grep
+      targets: ['src/server/*']
+      # 認証を素通りさせる穴は、通す条件が広いほど後から検証しづらくなる
+      patterns: ['DISABLE_AUTH', 'AUTH_TRUST_HOST', 'SKIP_AUTH', 'NO_AUTH']
+    source: >-
+      2026-09-22 実測。reel-auto には認証自体が無いため現状 absent。
+      フェーズ105 W3 で認証を入れるときに発火する仕掛けとして置く
+    status: active
+
+alternatives:
+  - option: ホスト信頼を環境変数で有効化する
+    rejected_because: >-
+      設定を忘れた環境で認証が開く。実測で GET / が 200 を返した。
+      開閉を決めるものをコードの外に置かない
+  - option: Vercel に載せて自動信頼に任せる
+    rejected_because: >-
+      Remotion のヘッドレス Chromium・ffmpeg・projects/ の永続ディスクがサーバーレスに
+      載らない（design ##42）。連携アプリが Vercel に載れているのは重い実行時依存が無いため
+
+provenance:
+  - type: document
+    ref: >-
+      連携アプリ src/auth.ts の trustHost 指定に付記された実測記録
+      （ホスト信頼の環境変数なし / next start、2箇所のレスポンスコード）
+  - type: document
+    ref: 'reel-auto/repo/docs/design.md ##42（デプロイ）/ ##42.0（複数人利用の阻害要因）'
+  - type: human_input
+    ref: >-
+      2026-09-22 デプロイ方式の検討中に連携アプリの記録を読み、reel-auto が
+      前提の成立側に入ることに気づいて資産化
+
+related_assets:
+  - id: DEC-001
+    relationship: relates_to
+
+governed_by:
+  - 'docs/requirements.md §53.5 条件3（社内の人だけがアクセスできる）と §53.4（対象外）'
+  - 'docs/design.md ##42'
+
+applies_to:
+  paths: ['src/server/*']
+  keywords:
+    - 認証
+    - ログイン
+    - アクセス制限
+    - ホスト
+    - trustHost
+    - ミドルウェア
+    - fail-open
+    - デプロイ
+    - Railway

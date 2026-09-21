@@ -12,7 +12,7 @@ purpose: >-
   （LedgerImage）へ正規化して詰め替える。書き込み側（toLedgerRow 相当）は移植しない。
 
 implementation:
-  repository: /Users/takeuchiyusuke/Developer/reel-auto/repo
+  repository: ~/Developer/reel-auto/repo
   commit: 28a3dd20466b3a0225708bc37e7fbc7b116a87dc
   branch: feat/high1-crawl-appproperties
   paths:
@@ -51,6 +51,10 @@ provenance:
 related_assets:
   - id: DEC-001
     relationship: implements
+
+governed_by:
+  - 'docs/requirements.md §51（この実装が属する要求。§51.4 の「対象外」を必ず確認する）'
+  - 'docs/design.md ##39.3.2'
 
 applies_to:
   paths: ['src/server/*']

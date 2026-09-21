@@ -126,3 +126,51 @@ Reasoning Amortization の成否はこの測定では判定できていない。
 - commit hash が `[要記述]` のまま。target_repo の明示記録は追加したが、
   今回の run では使っていないため未検証。二回目で確認する。
 - 二回目(High-2)で、この候補が承認後に実際に引き当てられるかは未検証。
+
+---
+
+## 2026-09-22 連携アプリの判断を資産化した／条件の陳腐化を自動で検出した
+
+### fact — DEC-004（連携アプリ側の判断を reel-auto へ先渡し）
+- 連携アプリの認証設定に、実測付きの記録があった。ホスト信頼の環境変数を設定せず
+  `next start` で起動したとき `GET /` が **200**（アプリ画面が表示）、`GET /api/posts` が **500**。
+  認証ライブラリが Vercel 以外で Host を信頼せず例外を投げ、その例外が認証
+  ミドルウェアを中断させ、フレームワークがページをそのまま返していた。
+- reel-auto は Railway（Vercel 以外）に載る予定であり、**この前提の成立側に入る**。
+- DEC-004 として資産化。フェーズ105 W3（アクセス制限）を task として評価した結果:
+  - C1（デプロイ先が Vercel でない）= **supported**
+  - C2（ミドルウェアの例外が「通す」側に倒れる）= **not_observed**（verifier=human）
+  - C3（環境変数だけで認証を素通りさせる分岐が無い）= **supported**
+  - 全体 = **hold**、human_review_required = true
+
+### fact — DEC-003 の条件が自動で反転した
+- task「台帳のフォルダ絞り込みを見直す」で評価したところ **propose_update**（exit 10）。
+- 根拠: C1「台帳の取得列にフォルダ階層を辿れる列が含まれていない」（expectation: absent）が
+  **contradicted**。`src/server/driveLedgerRead.ts:68` の `SELECT_COLUMNS` に
+  `parent_folder_id` が入っている。これは DEC-003 を作った後の High-2 の作業で追加された列。
+- 同じ run で DEC-001 と DEC-002 は inherit。全体は最も保守的な propose_update。
+
+### fact — 使ったことで見つかった実装欠陥（file_exists）
+- `_file_exists` が `observation.files_scanned` に**一致件数**を入れていた。
+  判定側は `scanned == 0` を「探索していない」と解釈するため、
+  **ファイルが存在しない場合が not_observed に落ち、`expectation: absent` の Condition が
+  原理的に supported へ到達できなかった**。
+- 実測: DEC-004 C1 が not_observed になった。修正後 supported。
+- 修正: 探索単位である target 数を scanned とし、root がディレクトリでない場合のみ
+  not_observed とした。回帰テスト2件追加（58件 → 60件、全通過。ruff 通過）。
+
+### interpretation
+- DEC-003 の件は、**判断が間違っていたのではなく、判断を支えていた前提が後の作業で変わった**
+  形である。列が1つ増えたことで「階層を辿れない」という観測事実が崩れた。
+  判定が `contradicted`（間違い）ではなく資産全体として `propose_update`（再検討せよ）に
+  なったのは設計どおり。実際、親 id が1列増えても子孫の列挙はできないため、
+  decision 自体は維持される可能性が高い。**そこを人に返すのが狙いの挙動。**
+- これは計画して作った事例ではない。DEC-003 を書いた時点と、列を足した時点、
+  そして今日それを踏む task が来た時点が別々にあり、その間の齟齬を自動で拾った。
+- file_exists の欠陥は、**合成事例では expectation: absent を file_exists で書いたことが
+  なかったために露出しなかった**。実際の判断（vercel.json が無いこと）を資産にした瞬間に出た。
+
+### open questions
+- DEC-003 は propose_update のまま。C1 の statement を
+  「子孫を列挙できる手段が無い」に書き換えるのが妥当か、人の判断が必要（未実施）。
+- DEC-004 C2 は Express では未確認。フェーズ105 W3 で認証方式を決めた時点で確認する。

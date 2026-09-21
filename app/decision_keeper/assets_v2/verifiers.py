@@ -117,11 +117,20 @@ def _file_exists(root: Path, condition: Condition) -> Evidence:
     v = condition.verifier
     if not v.targets:
         return _not_observed(condition, "targets が指定されていない")
+    inside, outside = _split_targets(v.targets)
+    # リポジトリ内の target を問うのに root が無ければ、探索そのものが成立していない。
+    if inside and not root.is_dir():
+        return _not_observed(condition, f"対象リポジトリ {root} が見つからない")
     hits = [rel for _, rel in _iter_files(root, v.targets)]
+    # files_scanned に一致件数を入れてはならない。入れると「ファイルが存在しない」が
+    # 「探索していない」と同じ形（scanned=0）になり、expectation: absent の Condition が
+    # 原理的に supported へ到達できなくなる（EA-06 の「探索して0件」≠「探索していない」に反する）。
+    # 実測: DEC-004 C1（vercel.json が無いこと）が not_observed になり、判定が hold に落ちた。
+    # file_exists の探索単位は target なので、確認した target 数を scanned とする。
     return Evidence(
         id=_new_id(),
         type="file_list",
-        observation={"files_scanned": len(hits), "matches": len(hits)},
+        observation={"files_scanned": len(v.targets), "matches": len(hits)},
         query={"targets": v.targets},
         samples=[{"path": r} for r in hits[:MAX_SAMPLES]],
     )

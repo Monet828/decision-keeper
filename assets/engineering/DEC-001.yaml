@@ -49,8 +49,8 @@ conditions:
     verifier:
       type: file_exists
       targets:
-        - '/Users/takeuchiyusuke/Developer/Insta/repo/src/lib/driveLedger.ts'
-        - '/Users/takeuchiyusuke/Developer/Insta/repo/src/lib/composeQuery.ts'
+        - '~/Developer/Insta/repo/src/lib/driveLedger.ts'
+        - '~/Developer/Insta/repo/src/lib/composeQuery.ts'
     source: High-1 で実測
     status: active
 
@@ -75,6 +75,10 @@ provenance:
 related_assets:
   - id: IMP-001
     relationship: implemented_by
+
+governed_by:
+  - 'docs/requirements.md §51.3（移植の範囲）と §51.4（対象外の一覧）'
+  - 'docs/design.md ##39.3.1 / ##51.3'
 
 applies_to:
   paths: ['src/server/*', 'src/drive/*', 'src/lib/*']

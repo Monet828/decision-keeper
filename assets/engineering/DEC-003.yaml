@@ -1,0 +1,65 @@
+# High-2 比較実験で、両群が独立に到達した設計上の制約を資産化した。
+id: DEC-003
+type: decision
+version: 1
+status: approved
+approved_by: takeuchi
+decided_at: 2026-09-21
+
+question: 台帳の行から画像をフォルダ単位で絞り込むとき、何を手がかりにするか
+
+decision: フォルダ id ではなく folder_path の前方一致で絞り込む。境界は必ず区切り文字で切る
+
+rationale:
+  status: known
+  text: >-
+    台帳はフォルダの入れ子構造を持たない。1行が持つのは所属アカウント・直接の親・
+    相対パス文字列だけで、親を辿って子孫全体を列挙することができない。
+    したがって「このフォルダ配下」を表現するには相対パスの前方一致しかない。
+    前方一致の境界を区切り文字で切らないと、兄弟フォルダを誤って拾う
+    （例: `A/B` が `A/Bx` を拾う）。
+    High-2 の比較実験で両群が独立にこの制約に突き当たり、どちらも翻訳層を自作した。
+
+conditions:
+  - id: C1
+    statement: 台帳の取得列に、フォルダ階層を辿れる列が含まれていない
+    expectation: absent
+    verifier:
+      type: grep
+      targets: ['src/server/driveLedgerRead.ts']
+      # SELECT_COLUMNS に親を辿る列が入っていないこと
+      patterns: ['SELECT_COLUMNS[^;]*parent_folder_id']
+    source: High-2 で実測。SELECT_COLUMNS に親を辿る列が無い
+    status: active
+
+alternatives:
+  - option: フォルダ id で親を辿って子孫を列挙する
+    rejected_because: 台帳が階層を持たないため辿れない。外部APIを叩くと台帳を読む意味が薄れる
+
+provenance:
+  - type: orca_run
+    ref: arm-no-asset
+    note: High-2 比較実験・資産なし群が独立に到達
+  - type: orca_run
+    ref: arm-with-asset
+    note: High-2 比較実験・資産あり群が独立に到達
+  - type: commit
+    ref: a17ce40
+
+related_assets:
+  - id: DEC-002
+    relationship: relates_to
+
+governed_by:
+  - 'docs/requirements.md §51（§51.4 に「対象外」の一覧がある。着手前に必ず確認する）'
+  - 'docs/design.md ##39.3.1'
+
+applies_to:
+  paths: ['src/server/*']
+  keywords:
+    - 台帳
+    - フォルダ
+    - 絞り込み
+    - パス
+    - 前方一致
+    - スコープ
