@@ -34,3 +34,6 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 .venv/
+
+# Local status report (not part of the deliverable)
+/status-report.html

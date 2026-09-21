@@ -52,6 +52,26 @@ def to_markdown(r: ReviewResult) -> str:
             a(f"| {f.kind} | `{f.path}` | {f.line or '-'} | `{f.excerpt}` |")
         a("")
 
+    if r.engineering_context:
+        c = r.engineering_context
+        a("## Engineering Context — 証拠から決めた難度とモデル選択")
+        a("")
+        a("LLM呼び出しの前に、決定論的な観測だけから難度を決め、モデルを選んでいる。")
+        a("難度の算出にLLMは関与しない。")
+        a("")
+        a(f"- 難度: **{c.difficulty}**")
+        a(f"- 選択したモデル: `{c.selected_model or '(既定)'}`")
+        a(f"- 前提の数: {c.assumption_count}")
+        a(f"- 観測できていない前提: {c.unobserved_count}")
+        a(f"- 前提と観測の食い違い: {c.expectation_mismatch_count}")
+        a(f"- 裏付けの無い主張: {c.unsupported_claim_count}")
+        a(f"- 検査を弱める変更: {c.guard_finding_count}")
+        a("")
+        a("難度の判定理由:")
+        for reason in c.reasons:
+            a(f"- {reason}")
+        a("")
+
     a("## FACTS — 収集した証拠 (R-02)")
     a("")
     a("決定論的なコレクタによる観測結果。LLMは関与していない。")

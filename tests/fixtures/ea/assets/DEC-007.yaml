@@ -1,0 +1,52 @@
+# Approved な Decision Asset。Implementation Asset と relation で接続している。
+id: DEC-007
+type: decision
+version: 1
+status: approved
+approved_by: takeuchi
+decided_at: 2025-11-04
+
+question: Permission情報をcacheしてよいか
+decision: Permission情報はcacheしない
+rationale:
+  status: known
+  text: 権限変更を即時反映する必要があり、失効の取りこぼしが監査上許容できないため
+
+conditions:
+  - id: C1
+    statement: 安全なcache invalidation機構が存在しない
+    expectation: absent
+    verifier:
+      type: grep
+      targets: ['src/auth/*', 'src/cache/*']
+      patterns: ['invalidate', 'revoke', 'purge']
+    source: PR-128 のレビューコメント
+    status: active
+
+  - id: C2
+    statement: 権限の失効は監査対象であり、監査要件が文書化されている
+    expectation: present
+    verifier:
+      type: grep
+      targets: ['docs/audit/*']
+      patterns: ['失効', '監査対象', 'audit']
+    source: docs/audit/permission-audit.md
+    status: active
+
+alternatives:
+  - option: TTL 60秒でcacheする
+    rejected_because: 失効まで最大60秒かかり、監査要件を満たさない
+
+provenance:
+  - type: pull_request
+    ref: https://github.com/example/billing-api/pull/128
+  - type: adr
+    ref: docs/adr/0007-no-permission-cache.md
+
+related_assets:
+  - id: IMP-018
+    relationship: implemented_by
+
+applies_to:
+  paths: ['src/auth/*', 'src/cache/*']
+  keywords: ['キャッシュ', 'cache', '権限', 'permission']

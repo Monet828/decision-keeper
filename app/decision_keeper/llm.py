@@ -30,7 +30,14 @@ class LLMResponse:
 
 
 class LLMClient(Protocol):
-    def complete(self, system: str, user: str, max_tokens: int) -> LLMResponse: ...
+    def complete(
+        self,
+        system: str,
+        user: str,
+        max_tokens: int,
+        model: str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> LLMResponse: ...
 
 
 class StubClient:
@@ -44,8 +51,15 @@ class StubClient:
 
     model = "stub/deterministic"
 
-    def complete(self, system: str, user: str, max_tokens: int) -> LLMResponse:
-        start = time.monotonic()
+    def complete(
+        self,
+        system: str,
+        user: str,
+        max_tokens: int,
+        model: str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> LLMResponse:
+        began = time.monotonic()
         start = user.find("<observations>")
         end = user.rfind("</observations>")
         payload = (
@@ -69,7 +83,7 @@ class StubClient:
         return LLMResponse(
             text=json.dumps({"judgements": judgements}, ensure_ascii=False),
             model=self.model,
-            elapsed_sec=time.monotonic() - start,
+            elapsed_sec=time.monotonic() - began,
             is_stub=True,
         )
 
@@ -91,15 +105,27 @@ class OrcaRouterClient:
         ).rstrip("/")
         self.model = model or os.environ.get("ORCAROUTER_MODEL") or DEFAULT_MODEL
 
-    def complete(self, system: str, user: str, max_tokens: int) -> LLMResponse:
+    def complete(
+        self,
+        system: str,
+        user: str,
+        max_tokens: int,
+        model: str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> LLMResponse:
         import httpx
 
         start = time.monotonic()
+        # Engineering Context をヘッダーでも送る。OrcaRouter の Routing DSL が
+        # 任意のHTTPヘッダーを条件にできるため、ルーティング側だけで
+        # 切り替える構成へ移せるかを確認する目的。
+        req_headers = {"Authorization": f"Bearer {self.api_key}"}
+        req_headers.update(headers or {})
         resp = httpx.post(
             f"{self.base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {self.api_key}"},
+            headers=req_headers,
             json={
-                "model": self.model,
+                "model": model or self.model,
                 "max_tokens": max_tokens,
                 "temperature": 0,
                 "response_format": {"type": "json_object"},
@@ -115,7 +141,7 @@ class OrcaRouterClient:
         usage = data.get("usage") or {}
         return LLMResponse(
             text=data["choices"][0]["message"]["content"],
-            model=data.get("model", self.model),
+            model=data.get("model", model or self.model),
             prompt_tokens=usage.get("prompt_tokens", 0),
             completion_tokens=usage.get("completion_tokens", 0),
             elapsed_sec=time.monotonic() - start,
