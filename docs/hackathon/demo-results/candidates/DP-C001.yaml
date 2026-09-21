@@ -1,0 +1,65 @@
+# 自動生成された判断資産の候補。未承認。
+# [要記述] を人が埋め、status を established、approved_by を実名に変えるまで
+# review の入力にしない（--include-candidates を付けない限り読み込まれない）。
+id: DP-C001
+version: 1
+status: candidate
+approved_by: unapproved
+decided_at: '2026-09-21'
+problem: 権限チェックが毎リクエストDBに当たり、p95レイテンシが悪化していた（A-1 の前提が変化した）
+chosen_decision: '[要記述] 前提が変化したため、判断を見直す必要がある'
+rationale: 'DP-001 v1 の前提 A-1 と現在の観測が食い違うことを確認した。旧判断の理由は次のとおり: 権限変更を即座に反映する必要があり、失効の取りこぼしが監査上許容できない'
+alternatives: []
+constraints:
+- 権限変更は次のリクエストから反映されること
+assumptions:
+- id: A-1
+  statement: '[要記述] キャッシュを即時無効化する機構が存在しない は現在の観測と食い違っている'
+  verify:
+    method: grep
+    pattern: '[要記述]'
+    paths:
+    - '[要記述]'
+    expect: present
+  _observed:
+    scanned_files: 3
+    evidence_count: 5
+    paths:
+    - src/cache/invalidate.py
+- id: A-2
+  statement: 権限の失効は監査対象であり、監査要件が文書化されている（DP-001 v1 時点の記述）
+  verify:
+    method: grep
+    pattern: '[要記述]'
+    paths:
+    - '[要記述]'
+    expect: present
+  _observed:
+    scanned_files: 1
+    evidence_count: 1
+    paths:
+    - docs/audit/permission-audit.md
+review_triggers:
+- 人が内容を確認し、[要記述] を埋めるまで利用しない
+applies_to:
+  paths:
+  - src/auth/*
+  - src/cache/*
+  keywords:
+  - キャッシュ
+  - cache
+  - 権限
+  - permission
+sources:
+- type: review
+  url: derived-from:DP-001#v1
+_provenance:
+  derived_from: DP-001
+  derived_from_version: 1
+  verdict: propose_update
+  disputed:
+  - A-1
+  insufficient: []
+  open_questions: []
+  note: この候補は自動生成であり、承認されていない。[要記述] を人が埋め、status を established、approved_by を実名に変えるまで
+    review の入力にしない。

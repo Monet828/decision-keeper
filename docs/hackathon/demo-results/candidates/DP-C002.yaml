@@ -1,0 +1,65 @@
+# 自動生成された判断資産の候補。未承認。
+# [要記述] を人が埋め、status を established、approved_by を実名に変えるまで
+# review の入力にしない（--include-candidates を付けない限り読み込まれない）。
+id: DP-C002
+version: 1
+status: candidate
+approved_by: unapproved
+decided_at: '2026-09-21'
+problem: 権限チェックが毎リクエストDBに当たり、p95レイテンシが悪化していた（A-1 の根拠が不足）
+chosen_decision: '[要記述] 判断に必要な証拠が不足している'
+rationale: 観測から判断できなかった。追加で確認すべき点は open_questions を参照。
+alternatives: []
+constraints:
+- 権限変更は次のリクエストから反映されること
+assumptions:
+- id: A-1
+  statement: キャッシュを即時無効化する機構が存在しない（DP-001 v1 時点の記述）
+  verify:
+    method: grep
+    pattern: '[要記述]'
+    paths:
+    - '[要記述]'
+    expect: absent
+  _observed:
+    scanned_files: 2
+    evidence_count: 0
+    paths: []
+- id: A-2
+  statement: 権限の失効は監査対象であり、監査要件が文書化されている（DP-001 v1 時点の記述）
+  verify:
+    method: grep
+    pattern: '[要記述]'
+    paths:
+    - '[要記述]'
+    expect: present
+  _observed:
+    scanned_files: 1
+    evidence_count: 1
+    paths:
+    - docs/audit/permission-audit.md
+review_triggers:
+- 人が内容を確認し、[要記述] を埋めるまで利用しない
+applies_to:
+  paths:
+  - src/auth/*
+  - src/cache/*
+  keywords:
+  - キャッシュ
+  - cache
+  - 権限
+  - permission
+sources:
+- type: review
+  url: derived-from:DP-001#v1
+_provenance:
+  derived_from: DP-001
+  derived_from_version: 1
+  verdict: hold
+  disputed: []
+  insufficient:
+  - A-1
+  open_questions:
+  - A-1「キャッシュを即時無効化する機構が存在しない」 を確認する証拠。提案文は即時無効化機構が存在すると主張しているが、走査済みの2ファイルからは無効化・失効に関する記述が検出されず、観測は前提の「機構が存在しない」という状態と一致しているため、変更の主張を裏付ける証拠が無い。
+  note: この候補は自動生成であり、承認されていない。[要記述] を人が埋め、status を established、approved_by を実名に変えるまで
+    review の入力にしない。
