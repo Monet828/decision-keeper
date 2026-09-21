@@ -1,4 +1,4 @@
-"""権限チェック。判断 DP-001 によりキャッシュしない。"""
+"""権限チェック。"""
 
 
 def get_permissions(db, user_id: str) -> set[str]:

@@ -1,7 +1,7 @@
 --- a/src/auth/permissions.py
 +++ b/src/auth/permissions.py
 @@ -1,10 +1,14 @@
- """権限チェック。判断 DP-001 によりキャッシュしない。"""
+ """権限チェック。"""
 +from src.cache import store
  
  
