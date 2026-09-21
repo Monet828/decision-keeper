@@ -59,6 +59,29 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     r.add_argument("--model-low", default=DEFAULT_MODEL_LOW, help="難度lowで使うモデル")
     r.add_argument("--model-high", default=DEFAULT_MODEL_HIGH, help="難度highで使うモデル")
+    st = sub.add_parser("start", help="タスク着手。資産を引き当てて手渡し資料を出す")
+    st.add_argument("--task-id", required=True)
+    st.add_argument("--repo", type=Path, required=True)
+    st.add_argument("--task-file", type=Path, help="タスク記述のファイル")
+    st.add_argument("--task-text", default="", help="タスク記述を直接渡す")
+    st.add_argument("--assets", type=Path, default=Path("assets/engineering"))
+    st.add_argument("--root", type=Path, default=Path("artifacts"))
+
+    fi = sub.add_parser("finish", help="タスク完了。差分と検証を記録し台帳へ積む")
+    fi.add_argument("--task-id", required=True)
+    fi.add_argument("--repo", type=Path, required=True)
+    fi.add_argument("--verify", action="append", default=[], help="検証コマンド（複数可）")
+    fi.add_argument(
+        "--assessment", default="unrecorded",
+        choices=["unrecorded", "matched", "diverged", "not_applicable"],
+        help="機械の判断が実際と合っていたかの人の評価",
+    )
+    fi.add_argument("--note", default="")
+    fi.add_argument("--root", type=Path, default=Path("artifacts"))
+
+    lg = sub.add_parser("ledger", help="実績台帳を表示する")
+    lg.add_argument("--root", type=Path, default=Path("artifacts"))
+
     ev = sub.add_parser("evaluate", help="Task に対し Engineering Asset を検索・評価する")
     ev.add_argument("--assets", type=Path, required=True, help="Asset ディレクトリ")
     ev.add_argument(
@@ -279,10 +302,81 @@ def run_evaluate(args: argparse.Namespace) -> int:
     return result.exit_code
 
 
+def run_start(args: argparse.Namespace) -> int:
+    from .session import start
+
+    text = args.task_text
+    if args.task_file:
+        text = args.task_file.read_text(encoding="utf-8")
+    if not text.strip():
+        print("--task-file か --task-text が必要です", file=sys.stderr)
+        return 2
+
+    try:
+        state, brief = start(args.root, args.assets, args.repo, args.task_id, text)
+    except FileExistsError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+
+    p = state.prediction
+    print(f"タスク: {state.task_id} / 記録: {state.run_id}")
+    print(f"機械の判断: {p.verdict or '(資産なし)'}")
+    if p.asset_ids:
+        print(f"引き当てた資産: {'、'.join(p.asset_ids)}")
+    for label, ids in (("前提と食い違い", p.contradicted),
+                       ("根拠不足", p.insufficient),
+                       ("未観測", p.not_observed)):
+        if ids:
+            print(f"  {label}: {'、'.join(ids)}")
+    if p.human_review_required:
+        print("  人の確認が必要な条件を含む")
+    if brief:
+        print(f"手渡し資料: {args.root / 'briefings' / (args.task_id + '.md')} ({len(brief)} 文字)")
+    else:
+        print("手渡し資料: なし（関連する資産が見つからなかった）")
+    return 0
+
+
+def run_finish(args: argparse.Namespace) -> int:
+    from .session import finish
+
+    try:
+        state = finish(
+            args.root, args.repo, args.task_id,
+            verify_commands=args.verify, assessment=args.assessment, note=args.note,
+        )
+    except FileNotFoundError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+
+    o = state.outcome
+    print(f"変更したパス: {len(o.changed_paths)} 件")
+    for v in o.verify:
+        status = "通過" if v["passed"] else f"失敗 (終了コード {v['exit_code']})"
+        print(f"  検証 `{v['command']}`: {status}")
+    print(f"生成した候補: {'、'.join(o.candidates) or 'なし'}")
+    print(f"人の評価: {o.human_assessment}")
+    failed = [v for v in o.verify if not v["passed"]]
+    return 10 if failed else 0
+
+
+def run_ledger(args: argparse.Namespace) -> int:
+    from .session import ledger_summary
+
+    print(ledger_summary(args.root))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.command == "review":
         return run_review(args)
+    if args.command == "start":
+        return run_start(args)
+    if args.command == "finish":
+        return run_finish(args)
+    if args.command == "ledger":
+        return run_ledger(args)
     if args.command == "evaluate":
         return run_evaluate(args)
     if args.command == "compare":
