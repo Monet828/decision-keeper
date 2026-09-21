@@ -26,3 +26,11 @@ artifacts/**/*
 
 # Sponsor slide contents (public redistribution not cleared). Kept local only.
 docs/hackathon/event-requirements.md
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.venv/

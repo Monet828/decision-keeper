@@ -1,0 +1,53 @@
+id: DP-001
+version: 1
+status: established
+approved_by: takeuchi
+decided_at: 2025-11-04
+
+problem: 権限チェックが毎リクエストDBに当たり、p95レイテンシが悪化していた
+chosen_decision: 権限情報はキャッシュしない
+rationale: 権限変更を即座に反映する必要があり、失効の取りこぼしが監査上許容できない
+
+alternatives:
+  - option: TTL 60秒でキャッシュする
+    rejected_because: 失効まで最大60秒かかり、監査要件を満たさない
+
+constraints:
+  - 権限変更は次のリクエストから反映されること
+
+assumptions:
+  - id: A-1
+    statement: キャッシュを即時無効化する機構が存在しない
+    verify:
+      method: grep
+      pattern: 'invalidate|revoke|purge'
+      paths:
+        - 'src/auth/*'
+        - 'src/cache/*'
+      expect: absent
+
+  - id: A-2
+    statement: 権限の失効は監査対象であり、監査要件が文書化されている
+    verify:
+      method: file_exists
+      paths:
+        - 'docs/audit/*'
+      expect: present
+
+review_triggers:
+  - すべての assumptions が disputed になったとき
+  - 監査要件が変更されたとき
+
+applies_to:
+  paths:
+    - 'src/auth/*'
+    - 'src/cache/*'
+  keywords:
+    - キャッシュ
+    - cache
+    - 権限
+    - permission
+
+sources:
+  - type: pr
+    url: https://github.com/example/billing-api/pull/128
