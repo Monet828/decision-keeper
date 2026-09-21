@@ -1,0 +1,16 @@
+--- a/src/auth/permissions.py
++++ b/src/auth/permissions.py
+@@ -1,10 +1,14 @@
+ """権限チェック。判断 DP-001 によりキャッシュしない。"""
++from src.cache import store
+ 
+ 
+ def get_permissions(db, user_id: str) -> set[str]:
++    cached = store.get(f"perm:{user_id}")
++    if cached is not None:
++        return cached
+     row = db.query("SELECT perms FROM user_permissions WHERE user_id = ?", user_id)
+-    return set(row["perms"]) if row else set()
++    perms = set(row["perms"]) if row else set()
++    store.put(f"perm:{user_id}", perms)
++    return perms

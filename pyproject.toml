@@ -1,0 +1,28 @@
+[project]
+name = "decision-keeper"
+version = "0.2.0"
+description = "過去の技術判断の前提が現在も成立するかを証拠から判定し、継承・更新提案・保留に振り分ける"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[tool.pytest.ini_options]
+# tests/fixtures 配下は合成リポジトリ（判定対象のデータ）であり、
+# 本プロジェクトのテストではない。収集対象から外す。
+testpaths = ["tests"]
+norecursedirs = ["fixtures", ".git", "node_modules"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 100
+src = ["app"]
+exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
