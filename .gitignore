@@ -1,0 +1,28 @@
+.DS_Store
+__MACOSX/
+.obsidian/
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+.vercel/
+.env
+.env.local
+.env.development
+.env.production
+app/.env.local
+app/node_modules/
+app/.next/
+
+# Hackathon local secrets, source PDFs, raw execution evidence
+.env.*
+!.env.example
+references/private/*
+!references/private/.gitkeep
+artifacts/**/*
+!artifacts/**/
+!artifacts/**/.gitkeep
+
+# Sponsor slide contents (public redistribution not cleared). Kept local only.
+docs/hackathon/event-requirements.md

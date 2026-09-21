@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "claims", "risks", "unresolved"],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "At most three sentences. What was found, not what was done."
+    },
+    "claims": {
+      "type": "array",
+      "maxItems": 3,
+      "description": "Decision-bearing claims only. A falsified claim is a successful result, not a failure.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim", "status", "evidence"],
+        "properties": {
+          "claim": { "type": "string" },
+          "status": { "type": "string", "enum": ["confirmed", "falsified", "uncertain"] },
+          "evidence": {
+            "type": "string",
+            "description": "Cite path:line. If nothing was found, say so explicitly."
+          }
+        }
+      }
+    },
+    "risks": { "type": "array", "items": { "type": "string" } },
+    "unresolved": {
+      "type": "array",
+      "description": "What could not be determined, stated plainly rather than guessed.",
+      "items": { "type": "string" }
+    }
+  }
+}
