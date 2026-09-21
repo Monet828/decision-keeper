@@ -23,13 +23,21 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def load_assets(assets_dir: Path) -> tuple[list[DecisionAsset], dict[str, str]]:
-    """資産ディレクトリを読み込み、資産一覧と (パス -> SHA-256) を返す（R-05）。"""
+def load_assets(
+    assets_dir: Path, include_candidates: bool = False
+) -> tuple[list[DecisionAsset], dict[str, str]]:
+    """資産ディレクトリを読み込み、資産一覧と (パス -> SHA-256) を返す（R-05）。
+
+    未承認の候補（status が established 以外、または approved_by が unapproved）は
+    既定で読み込まない。自動生成された候補が、人の承認を経ずに
+    判定の根拠として使われることを防ぐ。
+    """
     if not assets_dir.is_dir():
         raise AssetError(f"資産ディレクトリが見つかりません: {assets_dir}")
 
     assets: list[DecisionAsset] = []
     digests: dict[str, str] = {}
+    skipped: list[str] = []
 
     for path in sorted(assets_dir.rglob("*.yaml")) + sorted(assets_dir.rglob("*.yml")):
         digests[str(path)] = _digest(path)
@@ -40,12 +48,22 @@ def load_assets(assets_dir: Path) -> tuple[list[DecisionAsset], dict[str, str]]:
         if raw is None:
             continue
         try:
-            assets.append(DecisionAsset.model_validate(raw))
+            asset = DecisionAsset.model_validate(raw)
         except ValidationError as exc:
             raise AssetError(f"判断資産のスキーマに合いません: {path}\n{exc}") from exc
 
+        if not include_candidates and (
+            asset.status != "established" or asset.approved_by == "unapproved"
+        ):
+            skipped.append(f"{asset.id} (status={asset.status}, approved_by={asset.approved_by})")
+            continue
+        assets.append(asset)
+
     if not assets:
-        raise AssetError(f"判断資産が1件もありません: {assets_dir}")
+        detail = f"（未承認のため除外: {'、'.join(skipped)}）" if skipped else ""
+        raise AssetError(f"利用できる判断資産が1件もありません: {assets_dir}{detail}")
+    if skipped:
+        print(f"未承認のため除外した候補: {'、'.join(skipped)}")
     return assets, digests
 
 

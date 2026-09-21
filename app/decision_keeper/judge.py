@@ -11,6 +11,8 @@ import json
 
 from pydantic import ValidationError
 
+from .context import to_headers
+from .jsonio import extract
 from .limits import Limits
 from .llm import LLMClient
 from .models import (
@@ -19,6 +21,7 @@ from .models import (
     AssumptionJudgement,
     CostRecord,
     DecisionAsset,
+    EngineeringContext,
     JudgementSet,
 )
 
@@ -138,8 +141,13 @@ def judge(
     diff_text: str,
     proposal_text: str,
     limits: Limits,
+    ctx: EngineeringContext | None = None,
 ) -> tuple[list[AssumptionJudgement], CostRecord | None]:
-    """前提を判定する（R-03）。上限に達していれば呼び出さない（R-08）。"""
+    """前提を判定する（R-03）。上限に達していれば呼び出さない（R-08）。
+
+    ctx が与えられていれば、その難度で選ばれたモデルを使い、
+    Engineering Context をヘッダーでも送る。
+    """
     if not limits.check_llm_call():
         return _all_insufficient(evidence, "上限に達したため判定を行わなかった。"), None
 
@@ -147,7 +155,13 @@ def judge(
     limits.record_llm_call()
 
     try:
-        resp = client.complete(SYSTEM_PROMPT, user, max_tokens=limits.max_tokens)
+        resp = client.complete(
+            SYSTEM_PROMPT,
+            user,
+            max_tokens=limits.max_tokens,
+            model=(ctx.selected_model or None) if ctx else None,
+            headers=to_headers(ctx) if ctx else None,
+        )
     except Exception as exc:  # noqa: BLE001 - 呼び出し失敗を成功扱いにしない
         return _all_insufficient(evidence, f"LLM呼び出しに失敗した: {type(exc).__name__}"), None
 
@@ -160,10 +174,17 @@ def judge(
         is_stub=resp.is_stub,
     )
 
+    data, why = extract(resp.text)
+    if data is None:
+        return _all_insufficient(evidence, f"LLM出力を解釈できなかった。{why}"), cost
     try:
-        parsed = JudgementSet.model_validate_json(resp.text)
-    except (ValidationError, ValueError):
-        return _all_insufficient(evidence, "LLM出力がスキーマ検証を通らなかった。"), cost
+        parsed = JudgementSet.model_validate(data)
+    except ValidationError as exc:
+        first = exc.errors()[0] if exc.errors() else {}
+        detail = f"{first.get('loc')}: {first.get('msg')}" if first else ""
+        return _all_insufficient(
+            evidence, f"LLM出力がスキーマ検証を通らなかった。{detail}"
+        ), cost
 
     by_id = {j.assumption_id: j for j in parsed.judgements}
     result: list[AssumptionJudgement] = []

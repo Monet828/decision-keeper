@@ -235,3 +235,149 @@ def test_disabling_tests_never_yields_inherit():
     kinds = {f.kind for f in out["guard"]}
     assert "test_skipped" in kinds
     assert "assertion_removed" in kinds
+
+
+# --- Engineering Context（証拠から決まる難度とモデル選択） ---
+
+
+def test_context_is_low_when_everything_matches():
+    """前提がすべて一致し主張も無いときは難度 low。"""
+    from decision_keeper.context import compute, select_model
+
+    _, out = _run("A")
+    claimed = {e.assumption_id: False for e in out["evidence"]}
+    ctx = compute("DP-001", out["evidence"], [], claimed)
+    assert ctx.difficulty == "low"
+    assert select_model(ctx, "cheap", "strong") == "cheap"
+
+
+def test_context_is_high_on_expectation_mismatch():
+    """観測が資産の期待と食い違えば難度 high。"""
+    from decision_keeper.context import compute, select_model
+
+    _, out = _run("B")
+    claimed = {e.assumption_id: False for e in out["evidence"]}
+    ctx = compute("DP-001", out["evidence"], [], claimed)
+    assert ctx.difficulty == "high"
+    assert ctx.expectation_mismatch_count >= 1
+    assert select_model(ctx, "cheap", "strong") == "strong"
+
+
+def test_context_is_high_on_unsupported_claim():
+    """提案文の主張に裏付けが無ければ難度 high。"""
+    from decision_keeper.context import compute
+
+    _, out = _run("C")
+    claimed = {e.assumption_id: e.assumption_id == "A-1" for e in out["evidence"]}
+    ctx = compute("DP-001", out["evidence"], [], claimed)
+    assert ctx.difficulty == "high"
+    assert ctx.unsupported_claim_count == 1
+
+
+def test_context_is_high_on_guard_findings():
+    """検査を弱める変更があれば難度 high。"""
+    from decision_keeper.context import compute
+    from decision_keeper.models import GuardFinding
+
+    _, out = _run("A")
+    claimed = {e.assumption_id: False for e in out["evidence"]}
+    guard = [GuardFinding(kind="test_skipped", path="t.py")]
+    ctx = compute("DP-001", out["evidence"], guard, claimed)
+    assert ctx.difficulty == "high"
+
+
+def test_context_headers_are_sendable():
+    """Engineering Context はヘッダーに落とせる（Routing DSLの条件用）。"""
+    from decision_keeper.context import compute, to_headers
+
+    _, out = _run("B")
+    claimed = {e.assumption_id: False for e in out["evidence"]}
+    h = to_headers(compute("DP-001", out["evidence"], [], claimed))
+    assert h["X-Engineering-Difficulty"] == "high"
+    assert all(isinstance(v, str) for v in h.values())
+
+
+# --- 資産化のループ（人の承認なしに判断資産を更新しない） ---
+
+
+def _make_result_and_asset(case: str):
+    from decision_keeper.__main__ import _conflicting_changes  # noqa: F401
+    from decision_keeper.models import ReviewResult
+
+    verdict, out = _run(case)
+    asset = out["asset"]
+    result = ReviewResult(
+        asset_id=asset.id,
+        asset_version=asset.version,
+        verdict=verdict,
+        verdict_reason=out["verdict_reason"],
+        selection_reason=out["selection_reason"],
+        assumption_evidence=out["evidence"],
+        judgements=out["judgements"],
+        guard_findings=out["guard"],
+        open_questions=[
+            j.reason for j in out["judgements"] if j.status == "insufficient"
+        ],
+    )
+    return result, asset
+
+
+def test_generated_candidate_is_unapproved(tmp_path):
+    """生成される候補は必ず未承認で、[要記述] が残る。"""
+    from decision_keeper.propose_asset import build, write
+
+    result, asset = _make_result_and_asset("B")
+    cand = build(result, asset, "", tmp_path)
+    assert cand["status"] == "candidate"
+    assert cand["approved_by"] == "unapproved"
+    assert "[要記述]" in cand["chosen_decision"]
+    path = write(cand, tmp_path)
+    assert path.exists()
+    assert "未承認" in path.read_text(encoding="utf-8")
+
+
+def test_generation_does_not_touch_source_assets(tmp_path):
+    """候補生成は既存の資産ファイルを書き換えない（R-05）。"""
+    import hashlib
+    import shutil
+
+    from decision_keeper.propose_asset import build, write
+
+    work = tmp_path / "assets"
+    shutil.copytree(ASSETS, work)
+    before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in work.glob("*.yaml")}
+
+    result, asset = _make_result_and_asset("B")
+    write(build(result, asset, "", tmp_path / "out"), tmp_path / "out")
+
+    after = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in work.glob("*.yaml")}
+    assert before == after
+
+
+def test_unapproved_candidate_is_excluded_by_default(tmp_path):
+    """未承認候補は review の入力にならない。明示指定でのみ読まれる。"""
+    import shutil
+
+    from decision_keeper.assets import AssetError, load_assets
+    from decision_keeper.propose_asset import build, write
+
+    work = tmp_path / "assets"
+    shutil.copytree(ASSETS, work)
+    result, asset = _make_result_and_asset("B")
+    write(build(result, asset, "", work), work)
+
+    approved, _ = load_assets(work)
+    assert [a.id for a in approved] == ["DP-001"]
+
+    everything, _ = load_assets(work, include_candidates=True)
+    assert len(everything) == 2
+
+    only = tmp_path / "only"
+    only.mkdir()
+    shutil.copy(next(work.glob("DP-C*.yaml")), only)
+    try:
+        load_assets(only)
+    except AssetError as exc:
+        assert "未承認" in str(exc)
+    else:
+        raise AssertionError("未承認候補だけのディレクトリは読み込めてはならない")

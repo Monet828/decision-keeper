@@ -126,6 +126,23 @@ class GuardFinding(BaseModel):
     excerpt: str = ""
 
 
+# --- Engineering Context（証拠から決まる難度。OrcaRouterへ渡す） ---
+
+
+class EngineeringContext(BaseModel):
+    """判定前に、決定論的な観測だけから決まる難度。LLMは関与しない。"""
+
+    asset_id: str
+    assumption_count: int
+    unobserved_count: int
+    expectation_mismatch_count: int
+    unsupported_claim_count: int
+    guard_finding_count: int
+    difficulty: Literal["low", "high"]
+    reasons: list[str] = Field(default_factory=list)
+    selected_model: str = ""
+
+
 # --- 費用記録（R-07） ---
 
 
@@ -156,3 +173,4 @@ class ReviewResult(BaseModel):
     costs: list[CostRecord] = Field(default_factory=list)
     limits_hit: list[str] = Field(default_factory=list)
     assets_unchanged: bool = True
+    engineering_context: EngineeringContext | None = None
