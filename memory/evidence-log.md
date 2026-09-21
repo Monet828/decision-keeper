@@ -86,3 +86,43 @@ https://zenn.dev/m_go/articles/794869d594e333
 
 Reasoning Amortization の成否はこの測定では判定できていない。判定するには、
 実装資産の再利用を含む「二回目の開発」を通した測定が必要であり、未実施である。
+
+## 2026-09-21 実開発での Extractor 検証（reel-auto High-1）
+
+- source type: 自分で実行した開発と、その記録
+- source: `artifacts/experience/runs/run_reelauto_high1/`
+- date: 2026-09-21
+
+### fact（観測値）
+実タスク: reel-auto のクロールフォールバックで Drive の appProperties からタグを拾う。
+- 仕様書駆動ルールに従い design.md を先に更新（39.3.2 を追加、既存判断の後段のみ撤回）
+- 実装: driveLedgerRead.ts に toLedgerImageFromCrawled を追加、index.ts の loadDriveImages を差し替え
+- typecheck 通過。追加テスト7件すべて通過
+- npm test 全体: 変更前 1897件中4件失敗 / 変更後 1904件中4件失敗（増えていない）
+- Experience は 21 イベント、integrity 検証 OK
+
+### 実開発でしか出なかった Extractor の欠陥 3件
+1. **赤→緑の遷移に依存していた。** 実開発ではテストを先に失敗させないため遷移が0件になり、
+   実装資産の検証根拠が空になった。合成事例では自分で赤を作ったため気づけなかった。
+2. **パスを分類していなかった。** 仕様書(docs/design.md)を実装資産のパスとして拾い、
+   applies_to に重複した glob が入った。
+3. **対象リポジトリを取り違えた。** manifest.cwd は CLI を起動した場所であり、
+   作業対象とは限らない。別リポジトリを操作したため repository/commit が
+   AI HACK 側を指していた。
+
+### 修正
+1. ソース変更後に成功した実行を検証根拠とする。失敗したままのコマンドは
+   `known_failing` として残し、根拠にはしない。
+2. source / test / doc にパスを分類し、実装資産には source のみ使う。
+3. `target_repo` note を明示記録する経路を追加。無い場合は shell の cwd から推定し、
+   どちらで決めたかを `target.source` に残す。
+
+### interpretation
+合成事例だけでは Extractor の設計欠陥に気づけなかった。
+「赤→緑」を検証根拠にする設計は、TDD を前提にしており普通の開発では成立しない。
+実作業を1本通したことが、この3件を出した唯一の手段だった。
+
+### open questions
+- commit hash が `[要記述]` のまま。target_repo の明示記録は追加したが、
+  今回の run では使っていないため未検証。二回目で確認する。
+- 二回目(High-2)で、この候補が承認後に実際に引き当てられるかは未検証。
