@@ -38,3 +38,11 @@ __pycache__/
 # Local status report (not part of the deliverable)
 /status-report.html
 /experiment-report.html
+
+# 提出の証拠として、この2つだけ公開する（他の生成物は対象外のまま）。
+# ledger.jsonl = 予測（着手時の判定）と結果（差分・検証・人の評価）の対応。
+# briefings/p105-w3-auth.md = 実開発で実際にエージェントへ渡した手渡し資料。
+# どちらも顧客データ・秘密情報を含まないことを確認済み（2026-09-22）。
+!artifacts/ledger.jsonl
+!artifacts/briefings/
+!artifacts/briefings/p105-w3-auth.md
