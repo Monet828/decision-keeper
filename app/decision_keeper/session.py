@@ -179,9 +179,16 @@ def finish(
             rec.fs_change(path, "modified", diff)
 
     # 検証を実際に走らせる。落ちなかったことを成功とみなさない。
+    # ⚠ cwd を必ず --repo で明示する。省略すると Recorder.resume が manifest.cwd
+    # （= CLI を起動した場所。作業対象とは限らない）を使うため、検証コマンドが
+    # 別リポジトリで走って**偽の失敗**になる。
+    # 実測（2026-09-22、p105-w3-auth）: reel-auto では通る `npm run -s typecheck` が
+    # AI HACK 側で実行され終了コード 254 になり、台帳に「検証: 失敗」と記録された。
+    # Extractor で同型の取り違え（manifest.cwd を作業対象と見なす）を直した際、
+    # 検証コマンドの実行経路を見落としていた。
     verify: list[dict] = []
     for cmd in verify_commands or []:
-        code, out = rec.shell(cmd.split())
+        code, out = rec.shell(cmd.split(), cwd=repo)
         verify.append({"command": cmd, "exit_code": code, "passed": code == 0,
                        "tail": out.strip().splitlines()[-5:]})
 

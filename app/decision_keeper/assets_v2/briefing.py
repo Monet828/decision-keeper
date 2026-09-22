@@ -102,6 +102,7 @@ def build(store: AssetStore, result: AgentResult, repo: Path) -> Briefing:
                     {"option": a.option, "rejected_because": a.rejected_because}
                     for a in asset.alternatives
                 ],
+                "governed_by": asset.governed_by,
                 "verdict": ev.verdict,
                 "conditions": [
                     {
@@ -127,6 +128,7 @@ def build(store: AssetStore, result: AgentResult, repo: Path) -> Briefing:
                 "paths": impl.implementation.get("paths", []),
                 "requires": impl.compatibility.get("requires", []),
                 "runtime": impl.compatibility.get("runtime"),
+                "governed_by": impl.governed_by,
             }
         )
         b.snippets.extend(_read_entrypoint(repo, impl))
@@ -182,6 +184,32 @@ def to_prompt(b: Briefing) -> str:
             lines.append(s.text)
             lines.append("```")
             lines.append("")
+
+    # 同じ節を指す記述が資産ごとに揺れる（註釈の有無など）。
+    # 先頭の識別子（ファイル名＋節番号）で畳み、註釈が最も長いものを残す。
+    raw = [g for d in b.decisions for g in d.get("governed_by", [])]
+    raw += [g for i in b.implementations for g in i.get("governed_by", [])]
+    merged: dict[str, str] = {}
+    for g in raw:
+        key = g.split("（", 1)[0].split("(", 1)[0].strip()
+        if key not in merged or len(g) > len(merged[key]):
+            merged[key] = g
+    governed = sorted(merged.values())
+    if governed:
+        lines.append("### この領域を統べる上流の要求仕様")
+        lines.append("")
+        lines.append(
+            "**改修に着手する前に、次の箇所を必ず読むこと。** "
+            "ここには、この機能の適用範囲や「対象外」の指定が書かれていることがある。"
+        )
+        lines.append(
+            "過去の比較実験で、入口だけを渡された場合に上流要求の「対象外」条項を"
+            "見落としたまま実装した例が観測されている。"
+        )
+        lines.append("")
+        for g in governed:
+            lines.append(f"- {g}")
+        lines.append("")
 
     if b.verify_commands:
         lines.append("### 検証コマンド（過去にこの実装を通したもの）")

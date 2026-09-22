@@ -180,6 +180,29 @@ def test_file_exists_missing_repo_is_not_observed():
     assert evaluate_condition(cond, ev).judgment == "not_observed"
 
 
+def test_finish_runs_verify_in_target_repo():
+    """finish の検証コマンドは --repo で走ること（manifest.cwd で走らせない）。
+
+    構造で固定する。実際に npm を走らせるテストは環境依存になるため、
+    「cwd を明示している」ことをソース上で確認する。
+
+    回帰の由来: Recorder.resume は self.cwd を manifest.cwd（= CLI を起動した場所。
+    作業対象とは限らない）から復元する。finish が cwd を明示していなかったため、
+    検証コマンドが別リポジトリで実行され、reel-auto では通る `npm run -s typecheck` が
+    終了コード 254 の**偽の失敗**として台帳に記録された（2026-09-22、p105-w3-auth で実測）。
+    Extractor で同型の取り違えを直した際、検証コマンドの実行経路を見落としていた。
+    """
+    from pathlib import Path
+
+    from app.decision_keeper import session as session_mod
+
+    src = Path(session_mod.__file__).read_text(encoding="utf-8")
+    assert "rec.shell(cmd.split(), cwd=repo)" in src, (
+        "finish の検証コマンドが cwd=repo を明示していない。"
+        "manifest.cwd で走ると別リポジトリで検証してしまう"
+    )
+
+
 # --- EA-07: 補完してはならない ---
 
 def test_rationale_unknown_is_allowed_and_known_requires_text():

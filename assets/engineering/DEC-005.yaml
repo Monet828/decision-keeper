@@ -1,0 +1,120 @@
+# DEC-004 を実際に適用（reel-auto フェーズ105 W3）して判明した2点を反映した改訂案。
+# **status: candidate = 未承認。** 承認されるまで通常の検索には出ない（EA-01）。
+# 承認する場合は status を approved にし、DEC-004 を superseded にする。
+id: DEC-005
+type: decision
+version: 1
+status: candidate
+decided_at: 2026-09-22
+
+question: 認証ガードの開閉を左右する設定を、どう置くか
+
+decision: >-
+  開くか閉じるかを決めるものは、設定を省略したときに「閉じる」側へ倒す。
+  外す指示は特定値の明示（例 `REEL_AUTH=off`）だけが効くようにし、
+  未設定・空・別の値・大文字小文字の違いはすべて「認証必須」に落とす。
+  資格情報そのものは環境変数に置いてよい（秘密をリポジトリとイメージに入れないため）。
+
+rationale:
+  status: known
+  text: >-
+    観測1（連携アプリ側に記録された実測。Next.js。ホスト信頼の環境変数を設定せず next start）:
+    `GET /` が 200 を返しアプリ画面が表示され、`GET /api/posts` は 500 を返した。
+    認証ライブラリが Vercel 以外で Host を信頼せず例外を投げ、その例外が認証ミドルウェアを
+    中断させ、フレームワークがページをそのまま返していた。
+    観測2（2026-09-22 実測。reel-auto / Express 5.2.1。ミドルウェアで例外を投げる検証）:
+    同期 throw → 500、非同期 reject → 500、正常 → 200。保護対象は返らない。
+    解釈: 「ミドルウェアの例外で fail-open する」のは Next.js 固有であり、Express では起きない。
+    したがって危険の本体はフレームワークではなく、**設定の省略がどちら側に倒れるか**である。
+    設定を忘れた環境（移設・プロキシ越し・プレビュー・新しいデプロイ先）で黙って開くかどうかが、
+    実際に事故になる分岐点だった。
+
+conditions:
+  - id: C1
+    statement: 認証を外す分岐が、環境変数の特定値との一致で判定されている（存在の有無で判定していない）
+    expectation: present
+    verifier:
+      type: grep
+      targets: ['src/server/basicAuth.ts']
+      patterns: ['env\.REEL_AUTH === "off"']
+    source: >-
+      2026-09-22 実測。reel-auto W3 で実装。未設定・空・"on"・"1"・"true"・"OFF"・"off "
+      がすべて認証必須へ落ちることを単体テストで固定した
+    status: active
+
+  - id: C2
+    statement: 環境変数の「不在」で認証を素通りさせる分岐が入っていない
+    expectation: absent
+    verifier:
+      type: grep
+      targets: ['src/server/*']
+      # 不在で開く形の指紋。`!process.env.X` / `X ?? 素通り` / 未設定なら next() の類。
+      patterns: ['!process\.env\.REEL_AUTH\b', 'REEL_AUTH\s*\?\?', 'REEL_AUTH\s*!==']
+    source: 2026-09-22 実測。reel-auto では 0 件
+    status: active
+
+  - id: C3
+    statement: 資格情報が未設定のとき、素通りではなく閉じる（503）実装になっている
+    expectation: present
+    verifier:
+      type: grep
+      targets: ['src/server/index.ts']
+      patterns: ['res\.status\(503\)']
+    source: >-
+      2026-09-22 実測。資格情報を設定せず起動すると `GET /` も `GET /api/projects` も 503。
+      開く方向へは倒れない
+    status: active
+
+  - id: C4
+    statement: 認証ガードがミドルウェア層にあり、その層の例外がフレームワーク既定で「通す」側に倒れる
+    expectation: present
+    verifier:
+      type: human
+      note: >-
+        **reel-auto では成立しないことを実測済み（Express 5.2.1 は 500 = 閉じる）。**
+        この条件は Next.js 系のホストへ適用するときだけ意味を持つ。
+        DEC-004 ではこれが active だったため判定が常に hold になっていた
+    source: 2026-09-22 実測により reel-auto では反転。retired として履歴に残す
+    status: retired
+
+alternatives:
+  - option: 認証の有無を環境変数に一切置かない（DEC-004 の judgment）
+    rejected_because: >-
+      広すぎた。連携アプリの `DISABLE_AUTH=1` は省略時に閉じるので危険ではなく、
+      この案だと既に動いている正しい実装まで禁じてしまう。
+      禁じるべきは「省略が開く方向に倒れること」であって環境変数そのものではない
+  - option: クライアントのアドレスがループバックなら認証を素通りさせる
+    rejected_because: >-
+      実装は最小だが「デプロイ先のプロキシがループバックに見えないこと」を
+      デプロイするまで確認できない。外れていたら本番で認証が黙って外れる。
+      確認できない仮定に開閉を委ねない
+
+provenance:
+  - type: document
+    ref: '連携アプリ src/auth.ts の trustHost 指定に付記された実測記録'
+  - type: document
+    ref: 'reel-auto/repo/docs/design.md ##42.0.6（W3 の設計。Express の実測表を含む）'
+  - type: pull_request
+    ref: 'ruitanaka-max/reel-auto#10'
+    note: DEC-004 を適用して Basic 認証を実装した回。この適用中に判断文の広すぎが判明した
+  - type: human_input
+    ref: '2026-09-22 p105-w3-auth の finish で human_assessment=diverged として記録'
+
+related_assets:
+  - id: DEC-004
+    relationship: supersedes
+
+governed_by:
+  - 'docs/requirements.md §53.5 条件3（社内の人だけがアクセスできる）と §53.4（対象外）'
+  - 'docs/design.md ##42.0.6'
+
+applies_to:
+  paths: ['src/server/*']
+  keywords:
+    - 認証
+    - ログイン
+    - アクセス制限
+    - Basic 認証
+    - fail-open
+    - 環境変数
+    - デプロイ

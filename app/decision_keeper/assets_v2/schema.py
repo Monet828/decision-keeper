@@ -129,6 +129,13 @@ class AssetBase(BaseModel):
     related_assets: list[AssetRelation] = Field(default_factory=list)
     applies_to: AppliesTo = Field(default_factory=AppliesTo)
 
+    # この資産を統べる上流の要求仕様の所在。
+    # 実測（High-2 比較実験）: 実装資産が「改修の入口」だけを渡した結果、
+    # 資産を渡された側は探索の必要が消え、上流要求に書かれた
+    # 「この機能は対象外」という条項に到達しないまま実装した。
+    # 入口を渡すなら、同時に上流の所在も渡す。
+    governed_by: list[str] = Field(default_factory=list)
+
     @model_validator(mode="after")
     def _approved_needs_provenance(self):
         """provenance の無い Asset は approved にできない（EA-10）。"""
