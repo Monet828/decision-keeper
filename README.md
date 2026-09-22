@@ -1,5 +1,8 @@
 # Decision Keeper — 技術判断の「前提」を再検証する
 
+**解説記事（AI HACK 2026 提出）: https://zenn.dev/monet828/articles/dfa16907e209e6**
+
+
 開発で下した技術判断を **Engineering Asset** として保存し、
 **その判断を支えていた前提（Condition）が現在も成立するか**を再検証する実装です。
 
@@ -109,6 +112,8 @@ Express では同期・非同期とも 500（閉じる側）でした。連携�
 | 比較実験の設計と結果 | `docs/specs/high2-experiment.md` |
 
 ### 主張を実物で突き合わせる
+
+記事側の主張と、このリポジトリのファイルを対応させた表です。
 
 記事や本 README の主張は、次のファイルで確認できます。
 

@@ -332,4 +332,5 @@ LLM の呼び出し基盤には **OrcaRouter** を使いました。効いた点
 ## リンク
 
 - コード: https://github.com/Monet828/decision-keeper
+- この記事: https://zenn.dev/monet828/articles/dfa16907e209e6
 - 読む順番は README にあります（問題地図 → 要件 → 実測ログ → Asset の実物 → 実験設計）
