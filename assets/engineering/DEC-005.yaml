@@ -1,10 +1,13 @@
-# DEC-004 を実際に適用（reel-auto フェーズ105 W3）して判明した2点を反映した改訂案。
-# **status: candidate = 未承認。** 承認されるまで通常の検索には出ない（EA-01）。
-# 承認する場合は status を approved にし、DEC-004 を superseded にする。
+# DEC-004 を実際に適用（reel-auto フェーズ105 W3）して判明した2点を反映した改訂。
+# 2026-09-22 承認。これにより DEC-004 は superseded（通常の検索から外れる）。
+# 改訂の中身:
+#   1. judgment の「環境変数には置かない」が広すぎた → 「省略時に閉じる側へ倒す」へ
+#   2. C2（ミドルウェアの例外が通す側に倒れる）が Express では反転 → retired
 id: DEC-005
 type: decision
 version: 1
-status: candidate
+status: approved
+approved_by: takeuchi
 decided_at: 2026-09-22
 
 question: 認証ガードの開閉を左右する設定を、どう置くか

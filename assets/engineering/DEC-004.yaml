@@ -2,10 +2,19 @@
 # 先回りして渡すために資産化した。
 # 資産化の動機: reel-auto は Vercel 以外（Railway）に載る予定で、この判断の前提が
 # 「成立する側」に入る。判断そのものは連携アプリのもので、reel-auto では未適用。
+# 2026-09-22 superseded。DEC-005 が置き換える。
+# 理由は2つで、どちらも reel-auto フェーズ105 W3 で実際に適用してみて判明した。
+#   1. decision「環境変数には置かない」が広すぎた。禁じるべきは「設定の省略が開く方向へ
+#      倒れること」であり、環境変数そのものではない（連携アプリの DISABLE_AUTH=1 は
+#      省略時に閉じるので危険ではないのに、この文だと禁じてしまう）。
+#   2. C2（ミドルウェアの例外がフレームワーク既定で通す側に倒れる）が対象リポジトリで反転した。
+#      Express 5.2.1 実測: 同期 throw → 500 / 非同期 reject → 500（閉じる側）。
+#      この human 条件が active だったため、判定が常に hold になっていた。
+# この資産は履歴として残す。判断自体が誤りだったのではなく、適用範囲と前提が更新された。
 id: DEC-004
 type: decision
 version: 1
-status: approved
+status: superseded
 approved_by: takeuchi
 decided_at: 2026-09-22
 
@@ -87,6 +96,8 @@ provenance:
 related_assets:
   - id: DEC-001
     relationship: relates_to
+  - id: DEC-005
+    relationship: superseded_by
 
 governed_by:
   - 'docs/requirements.md §53.5 条件3（社内の人だけがアクセスできる）と §53.4（対象外）'

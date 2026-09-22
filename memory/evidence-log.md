@@ -225,3 +225,21 @@ Reasoning Amortization の成否はこの測定では判定できていない。
 ### open questions
 - DEC-005 は未承認。承認するかは人の判断（承認すれば DEC-004 は superseded）。
 - DEC-004 の C2 を retired にした判断が妥当か。Next.js 系へ適用する日には必要になる。
+
+### fact — DEC-005 承認後の判定（2026-09-22）
+- 人が DEC-005 を承認（`status: approved` / `approved_by: takeuchi`）し、
+  DEC-004 を `superseded` にした（`related_assets: DEC-005 superseded_by`）。
+- 通常検索の対象: DEC-001 / DEC-002 / DEC-003 / **DEC-005**。DEC-004 は除外。
+- **同じ task（フェーズ105 W3 アクセス制限）を再評価すると `inherit`、
+  `human_review_required` は false、`reuse_possible` は true。**
+  C1〜C3 は3件とも supported。
+- 承認前は `hold` / `human_review_required: true` だった（C2 が `verifier: human`）。
+
+### interpretation
+- **資産の改訂が、機械の判定を「常に人を待つ」から「自動で確定できる」へ変えた。**
+  差は verifier の質である。DEC-004 の C2 は「フレームワークの既定挙動」を human に委ねており、
+  対象リポジトリが変われば毎回人に返っていた。DEC-005 は同じ意図を
+  「この実装がこう書かれているか」という grep 可能な条件3本に置き換えた。
+- ここで一周した: 適用 → 判断文と前提の誤りが露出 → 候補として提案 → 人が承認 →
+  旧版は superseded。**資産が「正しい知識」ではなく「検査にかけられて更新される主張」
+  として扱えている。**
