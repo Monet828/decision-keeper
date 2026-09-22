@@ -8,7 +8,7 @@ status: approved
 approved_by: takeuchi
 decided_at: 2026-09-21
 
-question: 連携アプリ Insta AI Pro の機能を reel-auto へ持ち込むとき、どこまで移植するか
+question: 連携アプリ の機能を reel-auto へ持ち込むとき、どこまで移植するか
 
 decision: 読み取り側のみ移植する。書き込み・同期・カーソル管理は移植しない
 
@@ -16,7 +16,7 @@ rationale:
   status: known
   text: >-
     reel-auto は編集者本人が使う単一プロセスのローカルツールで、
-    `npm run server` を起動している間しか動かない。Insta AI Pro はサーバーレス環境で
+    `npm run server` を起動している間しか動かない。連携アプリ はサーバーレス環境で
     継続的に動く前提であり、同期基盤（フルクロール→upsert、Changes API のカーソル管理、
     差分反映）を複製するのは reel-auto の実行形態に合わない過剰投資になる。
     design.md 51.3「低レベル層のみ移植する」の方針そのもの。
@@ -40,13 +40,15 @@ conditions:
       targets: ['src/server/*', 'src/drive/*']
       # 語境界を付けないと ACRONYM 等に部分一致する（High-1 で実測）
       patterns: ['\bcron\b', 'node-cron', '\bscheduler\b', 'changes\.list', 'startPageToken']
-    source: High-1 で実測。対照的に Insta 側には driveChanges.ts / driveLedgerSync.ts がある
+    source: High-1 で実測。対照的に連携アプリ側には driveChanges.ts / driveLedgerSync.ts がある
     status: active
 
   - id: C3
-    statement: 移植元となる Insta AI Pro の読み取りモジュールが実在する
+    statement: 移植元となる 連携アプリ の読み取りモジュールが実在する
     expectation: present
     verifier:
+      # ⚠ ここだけ連携アプリのディレクトリ名が残る。verifier が実在のパスを見る必要があるため
+      # 匿名化できない（機能を壊す）。開発者のローカルにある連携アプリの所在。
       type: file_exists
       targets:
         - '~/Developer/Insta/repo/src/lib/driveLedger.ts'
@@ -55,7 +57,7 @@ conditions:
     status: active
 
 alternatives:
-  - option: Insta の同期機構ごと移植する
+  - option: 連携アプリの同期機構ごと移植する
     rejected_because: reel-auto は常時稼働しないため同期基盤が機能しない。51.3 に反する
   - option: 何も移植せず独自実装する
     rejected_because: 同じ Supabase / Drive を共有しており、データ形式を二重管理することになる
@@ -84,8 +86,8 @@ applies_to:
   paths: ['src/server/*', 'src/drive/*', 'src/lib/*']
   keywords:
     - 移植
-    - Insta
-    - Insta AI Pro
+    - 連携アプリ
+    - 連携アプリ
     - 連携アプリ
     - 台帳
     - drive_images

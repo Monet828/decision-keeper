@@ -8,7 +8,7 @@ approved_by: takeuchi
 decided_at: 2026-09-21
 
 purpose: >-
-  Insta AI Pro が Drive の appProperties に書いたタグを、reel-auto 側の読み取り型
+  連携アプリ が Drive の appProperties に書いたタグを、reel-auto 側の読み取り型
   （LedgerImage）へ正規化して詰め替える。書き込み側（toLedgerRow 相当）は移植しない。
 
 implementation:
@@ -61,7 +61,7 @@ applies_to:
   keywords:
     - 正規化
     - 移植
-    - Insta
+    - 連携アプリ
     - LedgerImage
     - appProperties
     - 台帳

@@ -98,7 +98,7 @@ provenance:
   - type: document
     ref: 'reel-auto/repo/docs/design.md ##42.0.6（W3 の設計。Express の実測表を含む）'
   - type: pull_request
-    ref: 'ruitanaka-max/reel-auto#10'
+    ref: '非公開リポジトリの PR #10（連携先の社内リポジトリ）'
     note: DEC-004 を適用して Basic 認証を実装した回。この適用中に判断文の広すぎが判明した
   - type: human_input
     ref: '2026-09-22 p105-w3-auth の finish で human_assessment=diverged として記録'
