@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+
+from . import approve as approve_mod
 from pathlib import Path
 
 from .assets import AssetError, load_assets, verify_unchanged
@@ -96,6 +98,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="未承認候補も検索対象にする（既定では除外）",
     )
 
+    ap_ = sub.add_parser("approve", help="候補資産を承認する（status と approved_by だけ変える）")
+    ap_.add_argument("asset_id", help="承認する Asset の id")
+    ap_.add_argument("--assets", type=Path, required=True)
+    ap_.add_argument("--by", required=True, help="承認者名")
+    ap_.add_argument(
+        "--status", default="approved", choices=sorted(approve_mod.VALID),
+        help="既定は approved",
+    )
+
     c = sub.add_parser("compare", help="判断資産あり/なしを比較する")
     c.add_argument("--assets", type=Path, required=True)
     c.add_argument("--cases", type=Path, required=True, help="事例ディレクトリの親")
@@ -136,6 +147,16 @@ def _conflicting_changes(asset, diff_text: str) -> list:
                         )
                     )
     return out
+
+
+def run_approve(args: argparse.Namespace) -> int:
+    try:
+        path = approve_mod.find(args.assets, args.asset_id)
+        print(approve_mod.apply(path, args.by, args.status))
+    except approve_mod.ApproveError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    return 0
 
 
 def run_review(args: argparse.Namespace) -> int:
@@ -381,6 +402,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_evaluate(args)
     if args.command == "compare":
         return run_compare(args)
+    if args.command == "approve":
+        return run_approve(args)
     return 2
 
 
