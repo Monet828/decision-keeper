@@ -37,6 +37,7 @@ class Briefing(BaseModel):
     task_id: str
     verdict: str = ""
     decisions: list[dict] = Field(default_factory=list)
+    references: list[dict] = Field(default_factory=list)  # Condition なしの判断（EA-14）
     implementations: list[dict] = Field(default_factory=list)
     snippets: list[SourceSnippet] = Field(default_factory=list)
     verify_commands: list[str] = Field(default_factory=list)
@@ -116,6 +117,21 @@ def build(store: AssetStore, result: AgentResult, repo: Path) -> Briefing:
             }
         )
 
+    # EA-14: Condition を持たない判断は「参照メモ」。verdict は付けない。
+    for ref_id in result.reference_decisions:
+        asset = store.decisions.get(ref_id)
+        if asset is None:
+            continue
+        b.references.append(
+            {
+                "id": asset.id,
+                "question": asset.question,
+                "decision": asset.decision,
+                "rationale": asset.rationale.text if asset.rationale.status != "unknown" else None,
+                "governed_by": asset.governed_by,
+            }
+        )
+
     for impl_id in result.reusable_implementations:
         impl = store.implementations.get(impl_id)
         if impl is None:
@@ -146,7 +162,7 @@ def build(store: AssetStore, result: AgentResult, repo: Path) -> Briefing:
 
 def to_prompt(b: Briefing) -> str:
     """LLM へ渡す本文。資産が無い群との差はこの本文の有無だけにする。"""
-    if not b.decisions and not b.implementations:
+    if not b.decisions and not b.implementations and not b.references:
         return ""
 
     lines: list[str] = ["## 過去の Engineering Asset（このリポジトリで既に確定している知識）", ""]
@@ -161,6 +177,17 @@ def to_prompt(b: Briefing) -> str:
         lines.append("- 前提の再検証結果（今回このリポジトリで実測した）:")
         for c in d["conditions"]:
             lines.append(f"  - {c['id']} [{c['judgment']}] {c['statement']} … {c['reason']}")
+        lines.append("")
+
+    # EA-14: 確かめようがないので verdict は付いていない。知識としてだけ渡す。
+    if b.references:
+        lines.append("### 参照メモ（確かめる条件は無い。過去にこう決めた、という記録）")
+        for r in b.references:
+            lines.append(f"- {r['id']}: {r['question']} → **{r['decision']}**")
+            if r["rationale"]:
+                lines.append(f"  - 理由: {r['rationale']}")
+            if r.get("governed_by"):
+                lines.append(f"  - 上位の要求: {r['governed_by']}")
         lines.append("")
 
     for i in b.implementations:

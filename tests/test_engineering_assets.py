@@ -7,10 +7,11 @@ import shutil
 from pathlib import Path
 
 import pytest
-from app.decision_keeper import scope
+from app.decision_keeper import approve, scope
 from conftest import ROOT
 from pydantic import ValidationError
 
+from decision_keeper.assets_v2 import briefing as briefing_mod
 from decision_keeper.assets_v2 import context as ctx_mod
 from decision_keeper.assets_v2 import verifiers
 from decision_keeper.assets_v2.agent import Task, run
@@ -481,3 +482,134 @@ def test_repo_paths_excludes_untracked_noise(tmp_path):
     paths = scope.repo_paths(repo)
     assert "src/server/index.ts" in paths
     assert not any(p.startswith("node_modules/") for p in paths)
+
+
+# --- EA-14: Condition を持たない判断は参照メモとして扱う（2026-09-23） ---
+
+
+def _note_asset(tmp_path, with_conditions: bool = False):
+    d = tmp_path / "assets"
+    d.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "id: DEC-N1",
+        "type: decision",
+        "status: approved",
+        "approved_by: takeuchi",
+        "question: 条件を書けない判断をどう残すか",
+        "decision: 判断と理由だけ残し、verdict には参加させない",
+        "provenance:",
+        "  - type: adr",
+        "    ref: docs/specs/engineering-assets-v0.1.md",
+        "applies_to:",
+        "  paths: ['src/*']",
+        "  keywords: []",
+    ]
+    if with_conditions:
+        lines += [
+            "conditions:",
+            "  - id: C1",
+            "    status: active",
+            "    statement: src/a.ts がある",
+            "    expectation: present",
+            "    verifier:",
+            "      type: file_exists",
+            "      targets: ['src/a.ts']",
+        ]
+    else:
+        lines.append("conditions: []")
+    (d / "DEC-N1.yaml").write_text("\n".join(lines), encoding="utf-8")
+    return d
+
+
+def _tiny_repo(tmp_path):
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True, exist_ok=True)
+    (repo / "src" / "a.ts").write_text("export const a = 1;\n", encoding="utf-8")
+    return repo
+
+
+def test_condition_less_decision_does_not_produce_a_verdict(tmp_path):
+    """Condition が無い判断は hold を出さない（EA-14）。
+
+    ここが hold のままだと、メモを足すほど全体が止まり inherit が出なくなる。
+    """
+    store = AssetStore.load(_note_asset(tmp_path))
+    result = run(store, Task(id="t", description="", diff=""), _tiny_repo(tmp_path))
+
+    assert result.evaluation is None, "確かめようのない判断で verdict を出さないこと"
+    assert result.reference_decisions == ["DEC-N1"]
+
+
+def test_condition_less_decision_still_reaches_the_briefing(tmp_path):
+    """verdict には入らないが、知識としては必ず手渡されること。"""
+    assets = _note_asset(tmp_path)
+    store = AssetStore.load(assets)
+    result = run(store, Task(id="t", description="", diff=""), _tiny_repo(tmp_path))
+
+    b = briefing_mod.build(store, result, _tiny_repo(tmp_path))
+    assert [r["id"] for r in b.references] == ["DEC-N1"]
+    text = briefing_mod.to_prompt(b)
+    assert "参照メモ" in text
+    assert "verdict には参加させない" in text
+
+
+def test_verifiable_decision_is_unaffected(tmp_path):
+    """Condition を持つ判断は従来どおり verdict を出す（回帰）。"""
+    store = AssetStore.load(_note_asset(tmp_path, with_conditions=True))
+    result = run(store, Task(id="t", description="", diff=""), _tiny_repo(tmp_path))
+
+    assert result.evaluation is not None
+    assert result.evaluation.verdict == "inherit"
+    assert result.reference_decisions == []
+
+
+def test_approve_changes_only_status_and_approver(tmp_path):
+    """承認は status と approved_by の 2 行だけを変える。本文に触らない。"""
+    d = _note_asset(tmp_path)
+    path = d / "DEC-N1.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        .replace("status: approved", "status: candidate")
+        .replace("approved_by: takeuchi", "approved_by: unapproved"),
+        encoding="utf-8",
+    )
+    original_body = [
+        ln for ln in path.read_text(encoding="utf-8").splitlines()
+        if not ln.startswith(("status:", "approved_by:"))
+    ]
+
+    msg = approve.apply(approve.find(d, "DEC-N1"), by="takeuchi")
+
+    text = path.read_text(encoding="utf-8")
+    assert "status: approved" in text
+    assert "approved_by: takeuchi" in text
+    assert "candidate" in msg and "approved" in msg
+    body_now = [ln for ln in text.splitlines() if not ln.startswith(("status:", "approved_by:"))]
+    assert body_now == original_body, "本文は1文字も変えないこと"
+
+
+def test_approve_refuses_placeholder_and_missing_provenance(tmp_path):
+    """穴が残った候補を承認できないこと（EA-10 / 穴あき資産の流入を防ぐ）。"""
+    d = _note_asset(tmp_path)
+    path = d / "DEC-N1.yaml"
+
+    # [要記述] が残っている
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "decision: 判断と理由だけ残し、verdict には参加させない",
+            "decision: [要記述]",
+        ).replace("status: approved", "status: candidate"),
+        encoding="utf-8",
+    )
+    with pytest.raises(approve.ApproveError, match="要記述"):
+        approve.apply(path, by="takeuchi")
+
+    # provenance が無い
+    text = path.read_text(encoding="utf-8").replace("decision: [要記述]", "decision: 何か")
+    text = "\n".join(
+        ln for ln in text.splitlines()
+        if not ln.startswith("provenance:") and not ln.strip().startswith(("- type: adr", "ref: docs/"))
+    )
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(approve.ApproveError, match="provenance"):
+        approve.apply(path, by="takeuchi")

@@ -48,6 +48,7 @@ class AgentResult(BaseModel):
     evaluations: list[AssetEvaluation] = Field(default_factory=list)
     evaluation: AssetEvaluation | None = None  # 全体を代表する1件（最も保守的なもの）
     engineering_context: ctx_mod.EngineeringContext
+    reference_decisions: list[str] = Field(default_factory=list)  # 条件を持たない判断（EA-14）
     reusable_implementations: list[str] = Field(default_factory=list)
     blocked_implementations: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
@@ -87,9 +88,32 @@ def run(store: AssetStore, task: Task, repo: Path) -> AgentResult:
             assets_unchanged=unchanged,
         )
 
+    # EA-14: active な Condition を持たない判断は「参照メモ」として扱い、verdict に入れない。
+    # 判断と理由だけを briefing へ渡す。確かめようのないものを hold の材料にすると、
+    # メモを足すほど全体が止まり、inherit が二度と出なくなる。
+    verifiable: list[tuple] = []
+    reference_ids: list[str] = []
+    for asset, selection_reason in decisions:
+        if any(c.status == "active" for c in asset.conditions):
+            verifiable.append((asset, selection_reason))
+        else:
+            reference_ids.append(asset.id)
+    if reference_ids:
+        notes.append("参照メモとして添付（Condition なし・verdict には入れない）: " + "、".join(reference_ids))
+
+    if not verifiable:
+        unchanged, _ = store.verify_unchanged()
+        return AgentResult(
+            task_id=task.id,
+            engineering_context=ctx_mod.build(None),
+            reference_decisions=reference_ids,
+            notes=notes + ["確かめられる Condition を持つ Decision Asset は無かった"],
+            assets_unchanged=unchanged,
+        )
+
     # 該当した Asset をすべて評価する。1件だけ見ると、広い Asset が他を覆い隠す。
     evaluations: list[AssetEvaluation] = []
-    for asset, selection_reason in decisions:
+    for asset, selection_reason in verifiable:
         evidence_by_condition = {
             c.id: verifiers.run(repo, c) for c in asset.conditions if c.status == "active"
         }
@@ -152,6 +176,7 @@ def run(store: AssetStore, task: Task, repo: Path) -> AgentResult:
     return AgentResult(
         task_id=task.id,
         evaluations=evaluations,
+        reference_decisions=reference_ids,
         evaluation=evaluation,
         engineering_context=engineering_context,
         reusable_implementations=reusable,

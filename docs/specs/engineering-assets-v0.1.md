@@ -134,6 +134,7 @@ human_review_required: true | false
 | EA-11 | Engineering Context を構造化して提供する。モデル選択は行わない | `asset_found`/`reuse_possible`/`decision_conflict`/`evidence_gap`/`human_review_required` を出す。Asset Layer に選択ロジックが無い | [確定] |
 | EA-12 | Execution Agent は Task に対し Asset を検索し、Condition を検証して verdict を返す | 3事例で inherit/propose_update/hold が出る | [確定] |
 | EA-13 | **差分が無い Task では、`applies_to.paths` を「リポジトリに実在するか」で照合する** | 変更0件の検証専用 run でも、該当 Asset が検索に出る | [確定: 2026-09-23] |
+| EA-14 | **active な Condition を持たない Decision は「参照メモ」として扱い、verdict に入れない** | Condition 0 件の Decision だけが該当したとき verdict が出ず、briefing には載る | [確定: 2026-09-23] |
 
 ## 5. 既存 decision-keeper との対応
 
@@ -182,3 +183,60 @@ human_review_required: true | false
 `applies_to.paths` を持つ Asset は、そのリポジトリのあらゆる Task に当たる。
 資産が数十件を超えたら、範囲照合には別の絞り込み（Task 種別・鮮度・関連）が要る。
 **現在 6 件なので問題にならない**が、増えた時点で再設計する。
+
+## EA-14 の背景（2026-09-23）
+
+### なぜ必要か
+
+Condition（機械が確かめられる形の前提）を書くのは重い。判断そのものは
+「Basic 認証にする」で済むが、Condition は「**それが正しくなくなるのはどういうときか**」を
+verifier が走る形で書く必要がある。
+
+一方、実際の開発で効いたはずの知識の多くは、Condition を必要としない。
+2026-09-22〜23 の実作業で起きた取りこぼし3件を振り返ると、いずれも
+**「既に知っていたのに、その瞬間に思い出さなかった」**型だった。
+
+| 取りこぼし | 何が起きたか | 必要だったもの |
+|---|---|---|
+| `finish` の verify が別リポジトリで走った | 同じ型のバグを Extractor で既に直していたのに、この経路を見落とした | 「このバグは複数経路にある」というメモ |
+| Dockerfile の `ENV REEL_PORT` | 同じ PR で、直したばかりの `PORT` の修正を自分で潰した | 「PORT の扱いは今直したところ」というメモ |
+| スモークテストの取り違え | 静的マウント側を叩いていて、クエリ経路を通していなかった | 「前にも同じ取り違えをした」というメモ |
+
+**3 件とも機械検証可能な Condition では防げず、ただのメモで防げた。**
+必要なのは検証ではなく、適切な瞬間に目の前へ出ること（＝EA-13 で引けるようになった部分）。
+
+### 何が問題だったか
+
+Condition を 0 件にした Decision は、これまで **`hold`（exit 20）** を返していた。
+このままメモ的な Decision を足すと、**足すほど全体が止まり、`inherit` が二度と出なくなる**。
+（Implementation Asset は既に Condition を持たずに briefing へ載る形になっていた。
+ Decision 側だけがこの経路を持っていなかった。）
+
+### 是正
+
+active な Condition を 1 件も持たない Decision は **参照メモ**として扱う。
+
+- **verdict には参加させない**（`reference_decisions` に分ける）
+- **briefing には必ず載せる**（問い・判断・理由・`governed_by`）
+- 参照メモしか該当しなかった場合、`evaluation` は `None` になる
+
+これにより「Condition を書けるものだけ書く」運用が成立する。
+Condition は後から、**1 行で書けて確実に効くものだけ**足せばよい
+（例: DEC-005/C3 の `res\.status\(503\)` は 1 行で、実際に `contradicted → supported` の
+反転を検出した）。
+
+### 承認の導線（`approve`）
+
+承認は「YAML を開いて `status` を書き換える」手作業だった。候補が 8 件溜まったまま
+1 件しか承認されていない原因なので、`approve` サブコマンドを足した。
+
+変えるのは `status` と `approved_by` の 2 行だけで、本文には触らない。
+次の場合は承認を拒む。
+
+- `provenance` が無い（EA-10）
+- `[要記述]` が残っている（穴あきの資産が検索に出てしまう）
+- 承認者名が空
+
+⚠ **未決**: 参照メモしか該当しなかったときの exit code は、現在 `20`（= 該当なしと同じ）。
+ワーカーがこれを「止まれ」と解釈すると、メモが付いただけで停止する。
+無人実行を始める前に決める必要がある。
