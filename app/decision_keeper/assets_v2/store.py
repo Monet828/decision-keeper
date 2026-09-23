@@ -86,14 +86,14 @@ class AssetStore:
     # --- 検索（原典§15） ---
 
     def search_decisions(
-        self, changed_paths: list[str], text: str
+        self, changed_paths: list[str], text: str, repo_paths: list[str] | None = None
     ) -> list[tuple[DecisionAsset, str]]:
-        return _match(self.decisions.values(), changed_paths, text)
+        return _match(self.decisions.values(), changed_paths, text, repo_paths)
 
     def search_implementations(
-        self, changed_paths: list[str], text: str
+        self, changed_paths: list[str], text: str, repo_paths: list[str] | None = None
     ) -> list[tuple[ImplementationAsset, str]]:
-        return _match(self.implementations.values(), changed_paths, text)
+        return _match(self.implementations.values(), changed_paths, text, repo_paths)
 
     # --- relation（原典§14） ---
 
@@ -124,8 +124,17 @@ class AssetStore:
         return out
 
 
-def _match(assets, changed_paths: list[str], text: str):
+def _match(assets, changed_paths: list[str], text: str, repo_paths: list[str] | None = None):
+    """Asset を検索する（原典§15 / EA-13）。
+
+    差分があるときは変更パスだけを見る。差分が無いとき(着手時・検証専用の run)に限り、
+    applies_to.paths を **リポジトリに実在するファイル** と照合する。
+
+    差分がある回にまで範囲照合を足さないのは、広い applies_to.paths を持つ Asset が
+    あらゆる変更に当たってしまうため。差分があるなら変更パスのほうが鋭い信号である。
+    """
     low = text.lower()
+    scope_basis = repo_paths if (not changed_paths and repo_paths) else None
     out = []
     for asset in assets:
         path_hits = [
@@ -134,12 +143,20 @@ def _match(assets, changed_paths: list[str], text: str):
             for p in changed_paths
             if fnmatch.fnmatch(p, pat)
         ]
+        scope_hits: list[str] = []
+        if scope_basis is not None:
+            for pat in asset.applies_to.paths:
+                found = [p for p in scope_basis if fnmatch.fnmatch(p, pat)]
+                if found:
+                    scope_hits.append(f"{pat} に {len(found)} 件")
         kw_hits = [kw for kw in asset.applies_to.keywords if kw.lower() in low]
-        if not path_hits and not kw_hits:
+        if not path_hits and not scope_hits and not kw_hits:
             continue
         parts = []
         if path_hits:
             parts.append("変更パスの一致: " + "、".join(path_hits[:5]))
+        if scope_hits:
+            parts.append("適用範囲がリポジトリに存在: " + "、".join(scope_hits[:5]))
         if kw_hits:
             parts.append("キーワードの一致: " + "、".join(kw_hits[:5]))
         out.append((asset, f"{asset.id} を選択した。" + " / ".join(parts)))
