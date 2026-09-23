@@ -133,6 +133,7 @@ human_review_required: true | false
 | EA-10 | すべての Asset は provenance から出典へたどれる | provenance が空の Asset は approved にできない | [確定] |
 | EA-11 | Engineering Context を構造化して提供する。モデル選択は行わない | `asset_found`/`reuse_possible`/`decision_conflict`/`evidence_gap`/`human_review_required` を出す。Asset Layer に選択ロジックが無い | [確定] |
 | EA-12 | Execution Agent は Task に対し Asset を検索し、Condition を検証して verdict を返す | 3事例で inherit/propose_update/hold が出る | [確定] |
+| EA-13 | **差分が無い Task では、`applies_to.paths` を「リポジトリに実在するか」で照合する** | 変更0件の検証専用 run でも、該当 Asset が検索に出る | [確定: 2026-09-23] |
 
 ## 5. 既存 decision-keeper との対応
 
@@ -153,3 +154,31 @@ human_review_required: true | false
 
 - **任せる**: モジュール分割、ファイル配置、レポート整形、合成事例の中身、テストの書き方
 - **確認する**: 上記スキーマの変更、verdict 語彙の変更、CLI の引数と終了コード
+
+## EA-13 の背景（2026-09-23 実測）
+
+台帳の実走行3件のうち2件が `no_asset` で終わっていた。原因を追うと、
+**`applies_to.paths` による照合が、実質的に一度も働いていなかった**。
+
+`_match()` はパターンを `changed_paths`（差分から取り出した変更ファイル）と突き合わせる。
+ところが `start`（着手時）は**作業前に走るので差分が常に空**であり、
+`p105-w3-auth-verify-recheck`（検証だけの run）も変更0件だった。
+結果、**パス照合の枝は死んでおり、実際にはキーワード照合だけで資産を引いていた**。
+
+これは目的と向きが逆である。Engineering Asset の要点は
+「過去の判断の Condition がまだ成り立つか確かめる」ことであり、
+**何も変更していない回こそ照合したい**。現状は「コードを変えたときだけ資産が出る」形だった。
+
+**是正**: `changed_paths` が空のときに限り、`applies_to.paths` を
+**リポジトリに実在するファイル**と照合する。差分があるときは従来どおり変更パスだけを見る
+（差分がある回にまで範囲照合を足すと、広い Asset があらゆる変更に当たってしまう）。
+
+選定理由の文字列で両者を区別する。
+
+- 変更パスで当たった → `変更パスの一致: ...`
+- 範囲の実在で当たった → `適用範囲がリポジトリに存在: ...`
+
+⚠ **限界**: 範囲照合は Asset 数に対して線形に緩い。`src/server/*` のような広い
+`applies_to.paths` を持つ Asset は、そのリポジトリのあらゆる Task に当たる。
+資産が数十件を超えたら、範囲照合には別の絞り込み（Task 種別・鮮度・関連）が要る。
+**現在 6 件なので問題にならない**が、増えた時点で再設計する。

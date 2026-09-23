@@ -17,6 +17,7 @@ from . import context as ctx_mod
 from . import verifiers
 from .evaluate import evaluate_asset
 from .schema import AssetEvaluation, DecisionAsset, ImplementationAsset
+from .. import scope
 from .store import AssetStore
 
 DIFF_PATH = re.compile(r"^\+\+\+ b/(.+)$", re.MULTILINE)
@@ -69,7 +70,10 @@ def _claims(asset: DecisionAsset, task: Task) -> dict[str, bool]:
 
 def run(store: AssetStore, task: Task, repo: Path) -> AgentResult:
     """Task に対し Asset を検索して評価する（原典§15）。"""
-    decisions = store.search_decisions(task.changed_paths, task.text)
+    # EA-13: 差分が無いとき(着手時・検証専用の run)は、適用範囲の実在で照合する。
+    changed = task.changed_paths
+    rpaths = scope.repo_paths(repo) if not changed else None
+    decisions = store.search_decisions(changed, task.text, rpaths)
     notes: list[str] = []
     if store.skipped:
         notes.append("未承認のため検索対象から除外: " + "、".join(store.skipped))

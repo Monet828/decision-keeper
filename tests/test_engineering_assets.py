@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from app.decision_keeper import scope
 from conftest import ROOT
 from pydantic import ValidationError
 
@@ -351,11 +352,132 @@ def test_verdict_rules(judgment, verdict):
     assert decide_verdict(ce, False)[0] == verdict
 
 
-def test_missing_asset_yields_evidence_gap():
+def test_missing_asset_yields_evidence_gap(tmp_path):
+    """適用範囲がリポジトリに無ければ、差分が無くても evidence_gap になる。
+
+    ⚠ 2026-09-23 に条件を変えた（EA-13）。以前はここで T1-inherit/repo を使い
+    「説明が無関係なら何も引かない」を確かめていたが、あの repo は
+    src/auth/ と src/cache/ を実際に持つため、**範囲照合では当たるのが正しい**。
+    テストが見たいのは「該当が無いときに evidence_gap が立つ」ことなので、
+    範囲が本当に存在しない repo へ対象を移した。
+    """
+    empty_repo = tmp_path / "empty"
+    (empty_repo / "docs").mkdir(parents=True)
+    (empty_repo / "docs" / "readme.md").write_text("何もない", encoding="utf-8")
+
     store = AssetStore.load(ASSETS)
     task = Task(id="T9", description="無関係な作業", diff="")
-    result = run(store, task, TASKS / "T1-inherit" / "repo")
+    result = run(store, task, empty_repo)
     assert result.evaluation is None
     assert result.engineering_context.asset_found is False
     assert result.engineering_context.evidence_gap is True
     assert result.exit_code == 20
+
+
+def test_no_diff_run_now_surfaces_assets_governing_the_repo():
+    """EA-13 の本体。検証専用の run でも、その repo を統べる Asset が出ること。
+
+    以前はここが no_asset になり、台帳の 3 件中 2 件が空振りしていた。
+    """
+    store = AssetStore.load(ASSETS)
+    task = Task(id="T9", description="無関係な作業", diff="")
+    result = run(store, task, TASKS / "T1-inherit" / "repo")
+
+    assert result.evaluation is not None, "repo に src/auth・src/cache がある以上、引けるべき"
+    assert result.engineering_context.asset_found is True
+    reasons = " ".join(n for n in result.notes)
+    assert result.evaluation.asset_id.startswith("DEC-")
+
+
+# --- EA-13: 差分が無い Task でも適用範囲で検索できる（2026-09-23） ---
+
+
+def _scope_asset(tmp_path):
+    """applies_to.paths だけを持ち、キーワードでは当たらない Asset を1件作る。"""
+    d = tmp_path / "assets"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "DEC-S1.yaml").write_text(
+        "\n".join(
+            [
+                "id: DEC-S1",
+                "type: decision",
+                "question: 範囲照合を確認できるか",
+                "decision: 範囲照合で引けること",
+                "status: approved",
+                "approved_by: test",
+                "provenance:",
+                "  - type: adr",
+                "    ref: docs/specs/engineering-assets-v0.1.md",
+                "applies_to:",
+                "  paths: ['src/server/*']",
+                "  keywords: ['zzz_never_matches']",
+                "conditions:",
+                "  - id: C1",
+                "    status: active",
+                "    statement: src/server 配下が存在すること",
+                "    expectation: present",
+                "    verifier:",
+                "      type: file_exists",
+                "      targets: ['src/server/index.ts']",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return d
+
+
+def _repo_with_server(tmp_path):
+    repo = tmp_path / "repo"
+    (repo / "src" / "server").mkdir(parents=True, exist_ok=True)
+    (repo / "src" / "server" / "index.ts").write_text("export const x = 1;\n", encoding="utf-8")
+    return repo
+
+
+def test_no_diff_task_still_finds_asset_by_scope(tmp_path):
+    """差分0件の Task でも、適用範囲がリポジトリに実在すれば検索に出る（EA-13）。
+
+    これが無いと、着手時(start)と検証専用の run が常に no_asset になる。
+    """
+    store = AssetStore.load(_scope_asset(tmp_path))
+    repo = _repo_with_server(tmp_path)
+
+    result = run(store, Task(id="t", description="関係ない説明", diff=""), repo)
+
+    assert result.evaluation is not None, "差分が無くても Asset が引けること"
+    assert result.evaluation.asset_id == "DEC-S1"
+
+
+def test_scope_match_is_labelled_distinctly(tmp_path):
+    """変更パスで当たったのか、範囲の実在で当たったのかを理由文で区別できること。"""
+    store = AssetStore.load(_scope_asset(tmp_path))
+    repo = _repo_with_server(tmp_path)
+    paths = scope.repo_paths(repo)
+
+    hits = store.search_decisions([], "説明", paths)
+    assert len(hits) == 1
+    assert "適用範囲がリポジトリに存在" in hits[0][1]
+    assert "変更パスの一致" not in hits[0][1]
+
+
+def test_scope_match_is_not_applied_when_diff_exists(tmp_path):
+    """差分があるときは範囲照合を足さない。広い Asset があらゆる変更に当たるのを防ぐ。"""
+    store = AssetStore.load(_scope_asset(tmp_path))
+    repo = _repo_with_server(tmp_path)
+    paths = scope.repo_paths(repo)
+
+    # src/server 配下に当たらない変更。従来どおり何も引かない。
+    diff = "--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n-a\n+b\n"
+    changed = Task(id="t", diff=diff).changed_paths
+    assert changed == ["README.md"]
+    assert store.search_decisions(changed, "説明", paths) == []
+
+
+def test_repo_paths_excludes_untracked_noise(tmp_path):
+    """git 管理外の生成物を範囲照合の母数に入れない。"""
+    repo = _repo_with_server(tmp_path)
+    (repo / "node_modules" / "junk").mkdir(parents=True, exist_ok=True)
+    (repo / "node_modules" / "junk" / "a.ts").write_text("x", encoding="utf-8")
+
+    paths = scope.repo_paths(repo)
+    assert "src/server/index.ts" in paths
+    assert not any(p.startswith("node_modules/") for p in paths)
