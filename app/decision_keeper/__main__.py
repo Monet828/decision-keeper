@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -28,10 +29,40 @@ from .select import select
 from .verdict import decide
 
 
+def _get_version() -> str:
+    """version を返す。インストール済みならそのメタデータ、なければ pyproject.toml から読む。"""
+    from importlib import metadata
+
+    try:
+        return metadata.version("decision-keeper")
+    except metadata.PackageNotFoundError:
+        pass
+    pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    try:
+        text = pyproject.read_text(encoding="utf-8")
+    except OSError:
+        return "unknown"
+    # [project] テーブル内の最初の version = "..." だけを見る
+    in_project = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("["):
+            in_project = stripped == "[project]"
+        elif in_project:
+            m = re.match(r'version\s*=\s*"([^"]+)"', stripped)
+            if m:
+                return m.group(1)
+    return "unknown"
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="python -m decision_keeper",
         description="過去の技術判断の前提が現在も成立するかを判定する。",
+    )
+    p.add_argument(
+        "--version", action="version", version=f"%(prog)s {_get_version()}",
+        help="version を表示して終了する",
     )
     sub = p.add_subparsers(dest="command", required=True)
 
